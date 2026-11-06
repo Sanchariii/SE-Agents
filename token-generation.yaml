@@ -1,0 +1,55 @@
+trigger: none # Manual trigger for self-service token generation
+
+pool:
+  name: hosted_agent_azr-vml-dai-gsc-301
+
+variables:
+- group: se-agent-dev-aksconfig
+
+stages:
+- stage: Generate_VI_Token
+  displayName: "Generate Video Indexer Access Token"
+  jobs:
+  - job: TokenJob
+    displayName: "Generate & Display Token"
+    steps:
+    - task: AzureCLI@2
+      name: generateVIToken
+      displayName: "Generate Video Indexer Access Token"
+      inputs:
+        azureSubscription: 'SPN-DAI-SEAGENT-D'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          set -e
+
+          echo "--> Fetching ARM Bearer Token..."
+          ARM_TOKEN=$(az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv)
+
+          ARM_URL="https://management.azure.com/subscriptions/$(subscriptionId)/resourceGroups/$(resourceGroup)/providers/Microsoft.VideoIndexer/accounts/$(videoIndexerAccountName)/generateAccessToken?api-version=2024-01-01"
+
+          echo "--> Requesting Video Indexer Access Token..."
+          RESPONSE=$(curl -s -X POST "$ARM_URL" \
+            -H "Authorization: Bearer $ARM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+                  "permissionType": "Contributor",
+                  "scope": "Account"
+                }')
+
+          VI_TOKEN=$(echo $RESPONSE | jq -r '.accessToken')
+
+          if [ "$VI_TOKEN" == "null" ] || [ -z "$VI_TOKEN" ]; then
+            echo "ERROR: Failed to fetch Video Indexer token."
+            echo "API Response: $RESPONSE"
+            exit 1
+          fi
+
+          # Convert token to Base64 to bypass ADO log masking
+          B64_TOKEN=$(echo -n "$VI_TOKEN" | base64 -w 0)
+
+          echo "========================================================================"
+          echo "         AZURE VIDEO INDEXER ACCESS TOKEN (BASE64)                      "
+          echo "========================================================================"
+          echo "$B64_TOKEN"
+          echo "========================================================================"

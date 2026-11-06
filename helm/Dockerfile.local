@@ -1,0 +1,40 @@
+# Local-development image. Mirrors helm/Dockerfile but tells pip to trust the PyPI
+# hosts, so `pip install` works behind a corporate TLS-inspection proxy whose root
+# CA the base image doesn't carry (the same reason dev.env sets TLS_VERIFY=false).
+#
+# NEVER use this image in production — helm/Dockerfile is the hardened one.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org pypi.python.org"
+
+# ffmpeg for audio/video; libgl1 + libglib for OpenCV (app/genai/ingestion/local);
+# LibreOffice Impress and fonts for max mode's slide renders.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg libgl1 libglib2.0-0 \
+        libreoffice-impress fontconfig fonts-crosextra-carlito fonts-liberation2 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /srv
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+COPY company-ppt-templet/ ./company-ppt-templet/
+
+# Max mode renders slides with headless LibreOffice; without Barlow it would
+# substitute a wider font and the visual review would judge the wrong wrapping.
+COPY company-ppt-templet/fonts/barlow/ /usr/local/share/fonts/barlow/
+RUN fc-cache -f
+COPY app ./app
+
+# Never run as root.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /srv
+USER appuser
+
+ENV APP_TYPE=local
+EXPOSE 8002
+
+CMD ["python", "-m", "app.main"]

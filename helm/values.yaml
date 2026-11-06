@@ -1,0 +1,50 @@
+replicaCount: 2
+
+image:
+  repository: se-agent-service
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+# Secrets are NOT templated into the chart. The pod reads a single JSON blob from
+# Azure Key Vault at startup (see app/config/keyvault.py, hosted mode).
+keyVault:
+  url: ""              # KEYVAULT_URL
+  secretName: ""       # KEYVAULT_SECRET_NAME
+  tenantId: ""         # AZURE_TENANT_ID
+
+# RS256 signing keys, mounted from a Kubernetes secret with keys `private` and `public`.
+jwtKeysSecret: se-agent-jwt-keys
+
+env:
+  APP_TYPE: hosted
+  APP_ENV: prod
+  LOG_LEVEL: INFO
+  TLS_VERIFY: "true"
+  JWT_REQUIRED: "true"
+  CORS_ALLOWED_ORIGINS: ""
+
+# Local video processing is CPU and memory hungry. Lower these once the workload
+# moves to Azure Video Indexer (see app/genai/ingestion/local/README.md).
+resources:
+  requests:
+    cpu: "1"
+    memory: 2Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+
+serviceAccount:
+  create: true
+  name: se-agent-service
+  annotations: {}      # workload-identity annotation for Key Vault access

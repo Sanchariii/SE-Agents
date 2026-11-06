@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockwell designer flow</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--red:#CD163F;--blue:#003E7E;--sky:#00AEEF;--orange:#F28C28;--green:#4C9A2A;--ink:#14202E}
+html,body{margin:0;height:100%;background:#fff}
+body{display:flex;align-items:center;justify-content:center;font-family:Barlow,"Segoe UI",system-ui,sans-serif;overflow:hidden}
+svg{height:96vh;width:auto;max-width:98vw;display:block}
+.node rect,.node polygon{stroke-width:2;transition:fill .3s,stroke .3s,stroke-width .2s}
+.nt{font-weight:700;font-size:14.5px;fill:var(--ink)}
+.ns{font-size:12.5px;fill:#3E4A59}
+.n-start rect{fill:#EEF6EA;stroke:var(--green)}
+.n-ad rect{fill:#FCEBEF;stroke:var(--red)}
+.n-max rect{fill:#E6F7FD;stroke:var(--sky)}
+.n-t1 rect{fill:#E9F0F8;stroke:var(--blue)}
+.n-t2 rect{fill:#FEF3E6;stroke:var(--orange)}
+.n-t3 rect{fill:#EEF0F3;stroke:#7A8796}
+.n-ok rect{fill:#E5F3DE;stroke:var(--green)}
+.n-st rect{fill:var(--blue);stroke:var(--blue)}
+.n-st .nt,.n-st .ns{fill:#fff}
+.n-gate polygon,.n-ask polygon{fill:#fff;stroke:var(--ink)}
+.node.active rect,.node.active polygon{stroke-width:3.6;filter:url(#glow)}
+.n-gate.checking polygon,.n-ask.checking polygon{stroke:var(--blue);stroke-dasharray:7 4;animation:dash .8s linear infinite}
+.n-gate.pass polygon,.n-ask.pass polygon{fill:#E5F3DE;stroke:var(--green)}
+.n-gate.fail polygon,.n-ask.fail polygon{fill:#FBE3E9;stroke:var(--red)}
+@keyframes dash{to{stroke-dashoffset:-22}}
+.edge{fill:none;stroke:#A8B3C1;stroke-width:2;marker-end:url(#arr);transition:stroke .4s}
+.edge.retry{stroke-dasharray:6 5}
+.edge.lit{stroke:var(--red);stroke-width:3;marker-end:url(#arrR)}
+.elabel{font-size:12.5px;fill:#6B7787;font-weight:600;transition:fill .3s}
+.elabel.lit{fill:var(--red);font-weight:700}
+.token{fill:var(--red);stroke:#fff;stroke-width:2.5;opacity:0;filter:url(#glow);transition:opacity .3s}
+.badge{opacity:0;transition:opacity .3s}
+.badge.show{opacity:1}
+.badge rect{fill:var(--blue)}
+.badge.green rect{fill:var(--green)}
+.badge text{fill:#fff;font-size:12.5px;font-weight:700}
+.scn-k{font-size:11px;font-weight:700;letter-spacing:.08em;fill:#6B7787}
+.scn-v{font-size:15px;font-weight:700;fill:var(--red)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<svg id="flow" viewBox="0 -50 790 1130" role="img" aria-label="Animated design pipeline">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#A8B3C1"/></marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#CD163F"/></marker>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#CD163F" flood-opacity=".45"/></filter>
+  </defs>
+  <text x="380" y="-30" class="scn-k" text-anchor="middle">NOW SHOWING</text>
+  <text x="380" y="-10" class="scn-v" id="scn" text-anchor="middle"></text>
+</svg>
+
+<script>
+const NS='http://www.w3.org/2000/svg', svg=document.getElementById('flow');
+const NODES=[
+  {id:'C', cls:'n-start',cx:380,y:20, w:340,h:58,lines:['✅ Slide content is final','(written from your documents)']},
+  {id:'AD',cls:'n-ad',   cx:380,y:106,w:420,h:70,lines:['🎨 ART DIRECTOR: one call for the whole deck','Picks a real Rockwell layout for every slide']},
+  {id:'CA',cls:'n-ask',  cx:380,cy:240,hw:96,hh:42,diamond:true,lines:['♻️ Unchanged?','content + design key']},
+  {id:'HI',cls:'n-ask',  cx:380,cy:350,hw:96,hh:42,diamond:true,lines:['Creativity','High?']},
+  {id:'MX',cls:'n-max',  cx:600,y:420,w:260,h:78,lines:['⭐ MAX MODE · High only','High Creativity master, on brand','code → guard → 15-check gate']},
+  {id:'RV',cls:'n-ask',  cx:600,cy:560,hw:90,hh:46,diamond:true,lines:['👁️ Visual review','render → score']},
+  {id:'T1',cls:'n-t1',   cx:250,y:420,w:250,h:70,lines:['Tier 1 · CREATIVE','AI writes DeckBuilder code,','guard-checked, run in a sandbox']},
+  {id:'G1',cls:'n-gate', cx:250,cy:560,hw:78,hh:44,diamond:true,lines:['🛡️ Gate','15 checks']},
+  {id:'T2',cls:'n-t2',   cx:250,y:650,w:250,h:70,lines:['Tier 2 · FITTED','AI fills a layout plan,','code builds it']},
+  {id:'G2',cls:'n-gate', cx:250,cy:790,hw:78,hh:44,diamond:true,lines:['🛡️ Gate','15 checks']},
+  {id:'T3',cls:'n-t3',   cx:250,y:880,w:250,h:70,lines:['Tier 3 · SAFE','Rule-based render on the','template layout, no AI']},
+  {id:'OK',cls:'n-ok',   cx:600,y:885,w:200,h:60,lines:['Slide accepted']},
+  {id:'ST',cls:'n-st',   cx:420,y:1000,w:460,h:60,lines:['🧵 Stitch every slide onto the Rockwell template','→ one deck (High master kept on brand)']}
+];
+const EDGES={
+  c_ad:'M380 78 V104', ad_ca:'M380 176 V196',
+  ca_ok:'M476 240 H765 V915 H702', ca_hi:'M380 282 V306',
+  hi_t1:'M284 350 H250 V418', hi_mx:'M476 350 H600 V418',
+  mx_rv:'M600 498 V512', rv_mx:'M690 560 H742 V459 H732', rv_ok:'M600 606 V883',
+  mx_t1:'M470 459 H377',
+  t1_g1:'M250 490 V514', g1_t1:'M172 560 H70 V455 H123', g1_ok:'M328 560 H470 V905 H498',
+  g1_t2:'M250 604 V648', t2_g2:'M250 720 V744', g2_ok:'M328 790 H470 V905 H498',
+  g2_t3:'M250 834 V878', t3_ok:'M375 925 H498', ok_st:'M600 945 V972 H420 V998'
+};
+const RETRY=['g1_t1','rv_mx'];
+const LABELS=[
+  {e:'ca_ok',x:620,y:231,t:'yes: reuse the cached file',a:'middle'},
+  {e:'hi_t1',x:242,y:392,t:'Low / Medium',a:'end'},{e:'hi_mx',x:540,y:341,t:'High',a:'middle'},
+  {e:'rv_mx',x:742,y:524,t:'redo with critique',a:'end'},{e:'rv_mx',x:742,y:539,t:'(≤ 3 reviews)',a:'end'},
+  {e:'rv_ok',x:610,y:640,t:'score ≥ 9 → ship'},{e:'rv_ok',x:610,y:655,t:'or the best of 3'},
+  {e:'mx_t1',x:423,y:434,t:'never',a:'middle'},{e:'mx_t1',x:423,y:449,t:'gate-clean',a:'middle'},
+  {e:'g1_t1',x:78,y:505,t:'fixes fed back'},{e:'g1_t1',x:78,y:520,t:'(up to 3 tries)'},
+  {e:'g1_ok',x:400,y:551,t:'pass',a:'middle'},{e:'g2_ok',x:400,y:781,t:'pass',a:'middle'},
+  {e:'g1_t2',x:260,y:630,t:'still failing'},{e:'g2_t3',x:260,y:860,t:'still failing'}
+];
+
+function mk(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);p&&p.appendChild(e);return e;}
+const gE=mk('g',{},svg), gN=mk('g',{},svg);
+for(const[id,d] of Object.entries(EDGES)) mk('path',{d,id:'e-'+id,class:'edge'+(RETRY.includes(id)?' retry':'')},gE);
+LABELS.forEach(l=>{const t=mk('text',{x:l.x,y:l.y,class:'elabel','data-e':l.e,'text-anchor':l.a||'start'},gE);t.textContent=l.t;});
+NODES.forEach(n=>{
+  const g=mk('g',{class:'node '+n.cls,id:'n-'+n.id},gN); let cy;
+  if(n.diamond){cy=n.cy;mk('polygon',{points:`${n.cx},${cy-n.hh} ${n.cx+n.hw},${cy} ${n.cx},${cy+n.hh} ${n.cx-n.hw},${cy}`},g);}
+  else{cy=n.y+n.h/2;mk('rect',{x:n.cx-n.w/2,y:n.y,width:n.w,height:n.h,rx:9},g);}
+  const y0=cy-(n.lines.length-1)*8.5+5;
+  n.lines.forEach((ln,i)=>{const t=mk('text',{x:n.cx,y:y0+i*17,'text-anchor':'middle',class:i===0?'nt':'ns'},g);t.textContent=ln;if(n.diamond&&i===1){t.id=n.id+'-sub';n.sub=ln;}});
+});
+function makeBadge(x,y,w){const g=mk('g',{class:'badge'},gN);mk('rect',{x,y,width:w,height:24,rx:12},g);const t=mk('text',{x:x+w/2,y:y+16,'text-anchor':'middle'},g);return{g,t};}
+const tryBadge=makeBadge(268,394,96);
+const maxBadge=makeBadge(612,392,104);
+const deckBadge=makeBadge(660,1018,48);
+const dot=mk('circle',{r:7,class:'token',cx:-20,cy:-20},svg);
+
+/* Each scenario: cached, or the creativity route and what fails at each attempt */
+const SCENARIOS=[
+  {name:'Unchanged slide: reused, no AI call',cached:true},
+  {name:'Medium: passes the gate first time',t1:[0]},
+  {name:'Medium: fixed after the gate’s feedback',t1:[2,0]},
+  {name:'High: max mode, passes on the 2nd review',high:true,reviews:[7,9]},
+  {name:'High: 3 reviews, the best-scored one ships',high:true,reviews:[6,8,7]},
+  {name:'High: never gate-clean → today’s ladder',high:true,maxFail:true,t1:[0]},
+  {name:'Falls back to Tier 2 · Fitted',t1:[2,1,1],t2:0},
+  {name:'Falls back to Tier 3 · Safe',t1:[2,1,1],t2:1}
+];
+let paused=false, deck=0;
+const $=id=>document.getElementById(id);
+const wait=ms=>new Promise(r=>{const t0=performance.now();(function tick(){ if(paused) return setTimeout(tick,100); performance.now()-t0>=ms?r():setTimeout(tick,30);})();});
+
+function travel(id){
+  const p=$('e-'+id),len=p.getTotalLength(),dur=Math.max(450,len*2.8);
+  p.classList.add('lit'); document.querySelectorAll(`.elabel[data-e="${id}"]`).forEach(l=>l.classList.add('lit'));
+  dot.style.opacity=1;
+  return new Promise(res=>{let el=0,last=performance.now();
+    (function step(now){ if(!paused) el+=now-last; last=now;
+      const k=Math.min(1,el/dur),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2,pt=p.getPointAtLength(e*len);
+      dot.setAttribute('cx',pt.x);dot.setAttribute('cy',pt.y); k<1?requestAnimationFrame(step):res();})(last);});
+}
+function focus(id){document.querySelectorAll('.node.active').forEach(n=>n.classList.remove('active'));$('n-'+id).classList.add('active');}
+function reset(){
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('active','checking','pass','fail'));
+  document.querySelectorAll('.edge,.elabel').forEach(e=>e.classList.remove('lit'));
+  NODES.filter(n=>n.diamond).forEach(n=>$(n.id+'-sub').textContent=n.sub);
+  [tryBadge,maxBadge].forEach(b=>b.g.classList.remove('show')); dot.style.opacity=0;
+}
+async function decide(id,yes,text){
+  const g=$('n-'+id); focus(id); g.classList.add('checking'); await wait(700);
+  g.classList.remove('checking'); g.classList.add(yes?'pass':'fail');
+  $(id+'-sub').textContent=text; await wait(600); return yes;
+}
+async function gate(id,fails){
+  const g=$('n-'+id),sub=$(id+'-sub'); focus(id);
+  g.classList.remove('pass','fail'); g.classList.add('checking');
+  for(let i=1;i<=15;i++){sub.textContent=`checking ${i}/15`;await wait(80);}
+  g.classList.remove('checking'); g.classList.add(fails?'fail':'pass');
+  sub.textContent=fails?`✖ ${fails} issue${fails>1?'s':''}`:'✔ all pass';
+  await wait(700); return !fails;
+}
+async function review(score){
+  const g=$('n-RV'),sub=$('RV-sub'); focus('RV');
+  g.classList.remove('pass','fail'); g.classList.add('checking');
+  sub.textContent='rendering…'; await wait(800);
+  sub.textContent='judging…'; await wait(800);
+  const ok=score>=9; g.classList.remove('checking'); g.classList.add(ok?'pass':'fail');
+  sub.textContent=`${ok?'✔':'✖'} ${score}/10`; await wait(800); return ok;
+}
+async function maxMode(s){
+  await travel('hi_mx');
+  if(s.maxFail){
+    focus('MX'); maxBadge.t.textContent='6 drafts'; maxBadge.g.classList.add('show'); await wait(1400);
+    maxBadge.g.classList.remove('show'); await travel('mx_t1'); return false;
+  }
+  let best=0;
+  for(let r=0;r<s.reviews.length;r++){
+    focus('MX'); maxBadge.t.textContent=`review ${r+1} of 3`; maxBadge.g.classList.add('show');
+    await wait(1000); await travel('mx_rv');
+    best=Math.max(best,s.reviews[r]);
+    if(await review(s.reviews[r])) break;
+    if(r<s.reviews.length-1) await travel('rv_mx');
+    else{ $('RV-sub').textContent=`best ${best}/10 ships`; await wait(900); }
+  }
+  maxBadge.g.classList.remove('show'); await travel('rv_ok'); return true;
+}
+async function ladder(s){
+  let done=false;
+  for(let a=0;a<s.t1.length;a++){
+    focus('T1'); tryBadge.t.textContent=`attempt ${a+1} of 3`; tryBadge.g.classList.add('show');
+    await wait(900);
+    await travel('t1_g1');
+    if(await gate('G1',s.t1[a])){await travel('g1_ok');done=true;break;}
+    if(a<s.t1.length-1) await travel('g1_t1');
+  }
+  tryBadge.g.classList.remove('show');
+  if(!done){
+    await travel('g1_t2'); focus('T2'); await wait(900);
+    await travel('t2_g2');
+    if(await gate('G2',s.t2)) await travel('g2_ok');
+    else{await travel('g2_t3'); focus('T3'); await wait(1000); await travel('t3_ok');}
+  }
+}
+async function runSlide(s){
+  reset(); $('scn').textContent=s.name;
+  focus('C'); await wait(700);
+  await travel('c_ad'); focus('AD'); await wait(900);
+  await travel('ad_ca');
+  if(await decide('CA',!!s.cached,s.cached?'✔ cache hit':'✖ redesign')) await travel('ca_ok');
+  else{
+    await travel('ca_hi');
+    const high=await decide('HI',!!s.high,s.high?'✔ High':'✖ Low / Med');
+    if(!high){ await travel('hi_t1'); await ladder(s); }
+    else if(!(await maxMode(s))) await ladder(s);
+  }
+  focus('OK'); await wait(700);
+  await travel('ok_st'); focus('ST');
+  deck++; deckBadge.t.textContent=`${deck} ✓`; deckBadge.g.classList.add('show','green');
+  await wait(1300);
+}
+(async function loop(){
+  for(let i=0;;i=(i+1)%SCENARIOS.length){
+    if(i===0&&deck>0){deck=0;deckBadge.g.classList.remove('show');}
+    await runSlide(SCENARIOS[i]);
+  }
+})();
+/* Space or click pauses / resumes */
+addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();paused=!paused;}});
+addEventListener('click',()=>paused=!paused);
+</script>
+</body>
+</html>

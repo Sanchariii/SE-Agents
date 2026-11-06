@@ -1,0 +1,58 @@
+# Local development stack: the FastAPI service (with ffmpeg/OpenCV for video
+# ingestion) plus a Redis instance, so nothing has to be started separately.
+#
+# Postgres and every Azure service stay remote — they are already reachable from
+# your machine via app/config/dev.env, so only Redis is containerised here.
+#
+#   docker compose up --build      # build image + start app and redis
+#   docker compose logs -f app     # follow app logs
+#   docker compose restart app     # pick up code / dev.env changes
+#   docker compose down            # stop everything
+#
+# App:   http://localhost:8002/api/docs
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: se-agent-redis
+    ports:
+      - "6379:6379"                       # exposed so host tools can inspect it too
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: helm/Dockerfile.local  # like helm/Dockerfile + ffmpeg/OpenCV, pip trusts PyPI behind the corp proxy
+    image: se-agent-service:local
+    container_name: se-agent-app
+    command: ["python", "-m", "app.main"]  # binds SERVICE_PORT (8002); reload on in local mode
+    environment:
+      APP_TYPE: local                      # image bakes "hosted"; force local secret loading
+      APP_ENV: dev                         # -> app/config/dev.env
+      REDIS_URI_LOCAL: redis://redis:6379/0  # "localhost" in dev.env would mean this container
+    ports:
+      - "8002:8002"
+    volumes:
+      # dev.env and app/config/private|public are excluded from the image by
+      # .dockerignore, so mount the source to supply them (and to iterate on code).
+      - ./app:/srv/app
+      - ./company-ppt-templet:/srv/company-ppt-templet
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:                           # override the image probe (it targets port 8000)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/api/health').read()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  redis-data:
