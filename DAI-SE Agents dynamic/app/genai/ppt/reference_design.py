@@ -5,9 +5,11 @@ uploaded PPT"). That deck then gives the new deck its look - its slide layouts,
 backgrounds, artwork, colours and fonts - and nothing else:
 
 1. ``claim_from_message`` (triage, start of the turn) records the uploaded deck as the
-   session's design reference in the brief. From then on
-   ``session_store.latest_docs`` leaves it out, so its text never reaches retrieval,
-   planning or the slide writers.
+   session's design reference in the brief - when the user asks for its design, or
+   automatically when a PowerPoint is uploaded together with source documents (the
+   documents are the content, the deck is the look), unless the user says the deck is
+   content. From then on ``session_store.latest_docs`` leaves it out, so its text
+   never reaches retrieval, planning or the slide writers.
 2. ``prepare`` (designer node) downloads it once, strips every slide (only masters,
    layouts and the theme stay, so none of its wording can travel) and checks that it
    has layouts a slide can be built on.
@@ -47,13 +49,24 @@ _COPY_DESIGN = re.compile(r"\b" + _any(C.COPY_WORDS) + r"[\w\s'/,-]{0,%d}?\b"
                           % C.MAX_GAP_CHARS + _any(C.DESIGN_WORDS), re.I)
 _REFERENCE = re.compile(r"\b" + _any(C.REFERENCE_WORDS), re.I)
 _DROP = re.compile(C.DROP_PATTERN, re.I)
+_LIKE = re.compile(C.LIKE_PATTERN, re.I)
+_AS_CONTENT = re.compile(C.CONTENT_PATTERN, re.I)
 
 
 def asks_to_copy_design(message: str) -> bool:
     """True when the message asks for the design of an uploaded deck, e.g. "copy the
     design of the uploaded PPT" or "use the attached template's look and feel"."""
     text = message or ""
-    return bool(_COPY_DESIGN.search(text) and _REFERENCE.search(text))
+    if asks_to_drop_design(text):
+        return False
+    return bool((_COPY_DESIGN.search(text) and _REFERENCE.search(text))
+                or _LIKE.search(text))
+
+
+def asks_for_deck_as_content(message: str) -> bool:
+    """True when the message treats the uploaded deck as source material, e.g.
+    "summarise the attached PPT" or "use the deck as the content"."""
+    return bool(_AS_CONTENT.search(message or "")) and not asks_to_copy_design(message)
 
 
 def asks_to_drop_design(message: str) -> bool:
@@ -88,8 +101,32 @@ def record_of(record) -> dict:
             "storage_path": record.storage_path}
 
 
+def _is_source(record) -> bool:
+    """A latest, usable, non-deck upload: content the deck can be written from."""
+    return (getattr(record, "is_latest", True) and not is_deck(record)
+            and str(getattr(record, "status", "")).split(".")[-1] != "failed")
+
+
+def _key(record: dict) -> str:
+    return f"{record.get('doc_id')}:{record.get('version')}"
+
+
 def claim_from_message(session_id: str, message: str) -> str:
-    """Record (or drop) the session's design reference from what the user asked.
+    """Record (or drop) the session's design reference for this turn.
+
+    The rules, in order:
+
+    * "go back to the Rockwell template" drops the reference;
+    * a request treating the deck as content ("summarise the attached PPT") drops it
+      too, and keeps that deck from being picked automatically again;
+    * an explicit request for the design ("copy the design of the uploaded PPT",
+      "make it like this deck") claims the uploaded deck;
+    * otherwise, when a PowerPoint is uploaded together with at least one source
+      document, the deck is claimed automatically: the documents give the content,
+      the deck gives the look. A newer deck uploaded later replaces it the same way.
+
+    A session with only documents keeps the Rockwell template; a session with only a
+    deck uses it as content unless the user asks for its design.
 
     Runs at the start of triage, before anything reads the session's documents, so
     the claimed deck is already out of the content for the rest of the turn.
@@ -101,32 +138,62 @@ def claim_from_message(session_id: str, message: str) -> str:
     from app.genai.agents.brief import DeckBrief
 
     brief = DeckBrief.load(session_id)
-    if brief.design_reference and asks_to_drop_design(message):
-        name = brief.design_reference.get("filename", "the reference")
+    docs = session_store.all_docs(session_id)
+    current = brief.design_reference
+
+    def drop(reason: str) -> str:
+        name = current.get("filename", "the reference")
+        chosen = pick_reference(docs)
         brief.design_reference = {}
+        brief.design_reference_declined = _key(record_of(chosen)) if chosen else ""
         brief.save(session_id)
-        log.info("reference design dropped (%s); back to the brand template", name,
-                 extra={"session_id": session_id})
-        return f"Stopped copying the design of {name}; using the Rockwell template."
-    if not asks_to_copy_design(message):
+        log.info("reference design dropped (%s, %s); back to the brand template", name,
+                 reason, extra={"session_id": session_id})
+        return reason
+
+    if asks_to_drop_design(message):
+        if not current:
+            if pick_reference(docs) is not None:
+                drop("")
+            return ""
+        return drop(f"Stopped copying the design of {current.get('filename')}; using "
+                    "the Rockwell template.")
+    if asks_for_deck_as_content(message) and pick_reference(docs) is not None:
+        if current:
+            return drop(f"Using {current.get('filename')} as content, not as the "
+                        "design; the deck uses the Rockwell template.")
+        drop("")
         return ""
-    chosen = pick_reference(session_store.all_docs(session_id))
+
+    explicit = asks_to_copy_design(message)
+    chosen = pick_reference(docs)
     if chosen is None:
-        log.info("the user asked to copy a design but no PowerPoint is uploaded",
-                 extra={"session_id": session_id})
-        return ("You asked to copy a design, but no PowerPoint file is uploaded - "
-                "upload the reference .pptx and ask again.")
+        if explicit:
+            log.info("the user asked to copy a design but no PowerPoint is uploaded",
+                     extra={"session_id": session_id})
+            return ("You asked to copy a design, but no PowerPoint file is uploaded - "
+                    "upload the reference .pptx and ask again.")
+        return ""
     record = record_of(chosen)
-    if (brief.design_reference.get("doc_id"), brief.design_reference.get("version")) == (
-            record["doc_id"], record["version"]):
+    if _key(current) == _key(record):
+        return ""
+    automatic = (not explicit and any(_is_source(d) for d in docs)
+                 and brief.design_reference_declined != _key(record))
+    if not (explicit or automatic):
         return ""
     brief.design_reference = record
+    brief.design_reference_declined = ""
     brief.save(session_id)
-    log.info("reference design claimed: %s v%s (sha %s); it is design only, never "
-             "content", record["filename"], record["version"], record["sha256"][:12],
+    log.info("reference design claimed (%s): %s v%s (sha %s); it is design only, never "
+             "content", "asked" if explicit else "uploaded with source documents",
+             record["filename"], record["version"], record["sha256"][:12],
              extra={"session_id": session_id})
-    return (f"Copying the design of {record['filename']} - its layouts, colours and "
-            "fonts only; none of its text is used.")
+    if explicit:
+        return (f"Copying the design of {record['filename']} - its layouts, colours "
+                "and fonts only; none of its text is used. The Rockwell logo stays.")
+    return (f"Using {record['filename']} as the design reference (layouts, colours and "
+            "fonts) with the content from your documents and the Rockwell logo. Say "
+            "\"use the PPT as content\" if it is source material instead.")
 
 
 @dataclass

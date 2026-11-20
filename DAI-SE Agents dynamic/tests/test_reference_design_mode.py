@@ -223,3 +223,121 @@ def test_the_claimed_deck_is_design_only_and_dropping_it_brings_it_back(
         "s1", "Go back to the Rockwell template")
     assert brief_module.DeckBrief.load("s1").design_reference == {}
     assert len(session_store.latest_docs("s1")) == 2
+
+
+# --- which deck is the design, which files are the content -------------------------- #
+PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+
+@pytest.fixture
+def store(session_store, monkeypatch):
+    from app.core.handlers import session_store as store_module
+    from app.genai.agents import brief as brief_module
+
+    monkeypatch.setattr(store_module, "session_store", session_store)
+    monkeypatch.setattr(brief_module, "session_store", session_store)
+    return session_store
+
+
+def _reference_of(sid):
+    from app.genai.agents.brief import DeckBrief
+    return DeckBrief.load(sid).design_reference
+
+
+def _upload(store, sid, name, digest):
+    mime = PPTX if name.endswith(".pptx") else "application/pdf"
+    return store.register_upload(sid, name, mime, digest * 64, f"p/{sid}/{name}")
+
+
+@pytest.mark.parametrize("message", [
+    "Make my deck like this deck",
+    "Create a LOTO deck using this template",
+    "Build the training in the style of the attached presentation",
+])
+def test_more_ways_of_asking_for_the_design_are_recognised(message):
+    assert rd.asks_to_copy_design(message)
+
+
+@pytest.mark.parametrize("message", [
+    "Summarise the attached PPT into 5 slides",
+    "Use the uploaded deck as the content",
+    "Translate this presentation to German",
+])
+def test_treating_the_deck_as_content_is_recognised(message):
+    assert rd.asks_for_deck_as_content(message)
+    assert not rd.asks_to_copy_design(message)
+
+
+def test_documents_only_keep_the_rockwell_design(store):
+    _upload(store, "s1", "LOTO manual.pdf", "a")
+
+    assert rd.claim_from_message("s1", "Create a LOTO training deck") == ""
+    assert _reference_of("s1") == {}
+
+
+def test_a_deck_uploaded_with_documents_is_the_design_and_the_documents_the_content(
+        store):
+    manual = _upload(store, "s1", "LOTO manual.pdf", "a")
+    deck = _upload(store, "s1", "Other Company Deck.pptx", "b")
+
+    note = rd.claim_from_message("s1", "Create a LOTO training deck")
+
+    assert "Other Company Deck.pptx" in note and "Rockwell logo" in note
+    assert _reference_of("s1")["doc_id"] == deck.doc_id
+    assert [d.doc_id for d in store.latest_docs("s1")] == [manual.doc_id]
+
+
+def test_a_deck_uploaded_alone_is_content_unless_its_design_is_asked_for(store):
+    _upload(store, "s1", "Old training.pptx", "b")
+
+    assert rd.claim_from_message("s1", "Refresh this into a 10 slide deck") == ""
+    assert _reference_of("s1") == {}
+    assert rd.claim_from_message("s1", "Make it like this deck") != ""
+    assert _reference_of("s1") != {}
+
+
+def test_saying_the_deck_is_content_keeps_it_out_of_the_design_for_later_turns(store):
+    _upload(store, "s1", "LOTO manual.pdf", "a")
+    _upload(store, "s1", "Field notes.pptx", "b")
+
+    assert rd.claim_from_message("s1", "Summarise the attached PPT with the manual") == ""
+    assert _reference_of("s1") == {}
+    assert rd.claim_from_message("s1", "Add a quiz at the end") == ""
+    assert _reference_of("s1") == {}
+    assert len(store.latest_docs("s1")) == 2
+
+
+def test_a_newer_reference_deck_replaces_the_previous_design(store):
+    _upload(store, "s1", "LOTO manual.pdf", "a")
+    first = _upload(store, "s1", "Design A.pptx", "b")
+    rd.claim_from_message("s1", "Create a LOTO training deck")
+    assert _reference_of("s1")["doc_id"] == first.doc_id
+
+    second = _upload(store, "s1", "Design B.pptx", "c")
+    note = rd.claim_from_message("s1", "Rebuild it")
+
+    assert "Design B.pptx" in note
+    assert _reference_of("s1")["doc_id"] == second.doc_id
+
+
+def test_each_session_keeps_its_own_design(store):
+    for sid, digest in (("alice", "b"), ("bob", "c")):
+        _upload(store, sid, "Manual.pdf", "a")
+        _upload(store, sid, f"{sid} design.pptx", digest)
+        rd.claim_from_message(sid, "Create a training deck")
+
+    assert _reference_of("alice")["filename"] == "alice design.pptx"
+    assert _reference_of("bob")["filename"] == "bob design.pptx"
+
+
+def test_preparing_the_reference_never_changes_the_uploaded_file(reference_bytes,
+                                                               tmp_path):
+    source = tmp_path / "stored.pptx"
+    source.write_bytes(reference_bytes)
+
+    prepared, note = rd.prepare("s", _record(reference_bytes),
+                                read_bytes=lambda _p: source.read_bytes(),
+                                cache_dir=tmp_path / "cache")
+
+    assert note == "" and prepared.path != source
+    assert source.read_bytes() == reference_bytes

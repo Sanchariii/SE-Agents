@@ -762,14 +762,27 @@ class ReferenceDesignConstants:
                     r"layouts?")
     MAX_GAP_CHARS = 40                      # between the copy word and the design word
     REFERENCE_WORDS = (r"reference", r"uploaded", r"attached",
+                       r"(?:this|that|my)\s+template",
                        r"this\s+(?:ppt|pptx|deck|presentation|file)",
                        r"the\s+(?:ppt|pptx)", r"my\s+(?:ppt|pptx|deck)")
     COPY_WORDS = (r"cop(?:y|ies|ying)", r"replicat", r"mirror", r"match", r"same",
-                  r"follow", r"use", r"based\s+on", r"keep")
+                  r"follow", r"use", r"using", r"based\s+on", r"keep")
     #: Going back to the brand template.
     DROP_PATTERN = (r"\b(?:stop|don'?t|do\s+not|no\s+longer)\s+(?:using|use|copy(?:ing)?)"
                     r"\s+the\s+(?:reference|uploaded)\s+(?:design|template|deck)|"
                     r"\b(?:back\s+to|use)\s+the\s+rockwell\s+(?:design|template)")
+    #: "make it like this deck", "in the style of the attached presentation".
+    LIKE_PATTERN = (r"\b(?:like|similar\s+to|in\s+the\s+(?:style|design)\s+of)\s+"
+                    r"(?:this|that|the|my)\s+(?:attached\s+|uploaded\s+|reference\s+)?"
+                    r"(?:ppt|pptx|deck|presentation|template|reference|one)\b")
+    #: The uploaded deck is the content, not a design: it is not claimed (or is
+    #: dropped). "summarise the attached PPT", "use the deck as content".
+    CONTENT_PATTERN = (
+        r"\b(?:summari[sz]e|translate|convert|update|improve|edit|rework|shorten|"
+        r"expand|content\s+(?:from|of)|text\s+(?:from|of))\s+(?:the\s+|this\s+|my\s+|"
+        r"that\s+)?(?:attached\s+|uploaded\s+)?(?:ppt|pptx|deck|presentation|slides)\b|"
+        r"\buse\s+(?:the\s+|this\s+|my\s+)?(?:attached\s+|uploaded\s+)?"
+        r"(?:ppt|pptx|deck|presentation|slides)\s+as\s+(?:the\s+)?(?:content|source)")
     #: When several decks are uploaded, a file name with one of these words wins.
     NAME_HINTS = ("reference", "template", "design", "theme", "style")
     EXTENSIONS = (".pptx", ".potx")

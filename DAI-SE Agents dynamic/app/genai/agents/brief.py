@@ -236,6 +236,9 @@ class DeckBrief(BaseModel):
     #: sha256, storage_path); empty when the deck uses the brand template. Its text is
     #: never content: `session_store.latest_docs` leaves it out.
     design_reference: dict = {}
+    #: "doc_id:version" of an uploaded deck the user said is content, not a design, so
+    #: it is not claimed automatically again; "" when none.
+    design_reference_declined: str = ""
 
     @classmethod
     def load(cls, session_id: str) -> "DeckBrief":
