@@ -1,0 +1,94 @@
+<header class="topbar">
+  <div class="brand">
+    <img class="brand-logo" src="assets/SE-Logo.png" alt="SE Agents">
+    <span class="brand-name">SE Agents</span>
+  </div>
+
+  <nav class="tabs">
+    <button type="button"
+            class="tab-btn"
+            [class.active]="currentTab === 'chat'"
+            (click)="tabChange.emit('chat')">Generate</button>
+    <button type="button"
+            class="tab-btn"
+            [class.active]="currentTab === 'pipeline'"
+            (click)="tabChange.emit('pipeline')">Pipeline</button>
+    <ng-container *ngIf="isAdmin">
+      <button type="button"
+              class="tab-btn"
+              [class.active]="currentTab === 'analytics'"
+              (click)="tabChange.emit('analytics')">Analytics</button>
+    </ng-container>
+  </nav>
+
+  <div class="topbar-right">
+    <!-- Theme Toggle Button -->
+    <button type="button"
+            id="theme-toggle-app"
+            class="theme-toggle"
+            (click)="themeToggle.emit()"
+            aria-label="Toggle light/dark theme"
+            title="Toggle light/dark theme">
+      <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
+      <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+    </button>
+
+    <div class="header-divider"></div>
+
+    <!-- User Profile Section: Avatar (with Microsoft badge) + Full User Name -->
+    <div class="user-profile-widget" (click)="toggleRolePopover($event)" [title]="userName">
+      <div class="user-avatar-wrap">
+        <div class="user-avatar-circle">
+          {{ userInitials }}
+        </div>
+        <div class="ms-badge" title="Microsoft SSO">
+          <svg width="8" height="8" viewBox="0 0 16 16" fill="none">
+            <rect x="0" y="0" width="7.2" height="7.2" fill="#F25022"/>
+            <rect x="8.8" y="0" width="7.2" height="7.2" fill="#7FBA00"/>
+            <rect x="0" y="8.8" width="7.2" height="7.2" fill="#00A4EF"/>
+            <rect x="8.8" y="8.8" width="7.2" height="7.2" fill="#FFB900"/>
+          </svg>
+        </div>
+      </div>
+      <span class="user-display-name">{{ userName }}</span>
+
+      <!-- Role Popover / Tooltip on click -->
+      <div class="role-popover" *ngIf="showRolePopover" (click)="$event.stopPropagation()">
+        <div class="role-popover-header">
+          <div class="role-popover-avatar">{{ userInitials }}</div>
+          <div class="role-popover-info">
+            <div class="role-popover-name">{{ userName }}</div>
+            <div class="role-popover-email" *ngIf="userEmail">{{ userEmail }}</div>
+          </div>
+        </div>
+        <div class="role-popover-divider"></div>
+        <div class="role-popover-section">
+          <div class="role-popover-label">Assigned Roles</div>
+          <div class="role-badge-list">
+            <span class="role-badge" *ngFor="let role of userRoles">{{ role }}</span>
+            <span class="role-badge" *ngIf="!userRoles || !userRoles.length">General User</span>
+          </div>
+        </div>
+        <div class="role-popover-footer">
+          <span class="status-indicator">
+            <span class="status-dot-sm ok"></span> Active Session
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Logout Icon Button matching screenshot -->
+    <button type="button"
+            class="btn-logout-icon"
+            id="logout-btn"
+            (click)="logout.emit()"
+            title="Log out"
+            aria-label="Log out">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+        <polyline points="16 17 21 12 16 7"></polyline>
+        <line x1="21" y1="12" x2="9" y2="12"></line>
+      </svg>
+    </button>
+  </div>
+</header>

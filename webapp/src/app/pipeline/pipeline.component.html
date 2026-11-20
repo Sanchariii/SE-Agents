@@ -1,0 +1,53 @@
+<section id="tab-pipeline"
+         class="tab-panel active">
+  <div class="panel-header">
+    <h2>Content Pipeline</h2>
+    <p class="muted">Sessions you've run in this browser — submitted, running, and completed.</p>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table" id="pipeline-table">
+      <thead>
+        <tr>
+          <th>Projects</th><th>Last message</th><th>Status</th>
+          <th>Version</th><th>Verdict</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="pipeline-body">
+        <tr *ngIf="!sessions.length">
+          <td colspan="6" class="muted">No sessions yet — start one from the Generate tab.</td>
+        </tr>
+        <tr *ngFor="let s of sessions; trackBy: trackSessionById">
+          <td>{{ s.title }}</td>
+          <td>{{ pipelineLastMessage(s) }}</td>
+          <td><span class="status-pill" [ngClass]="s.status">{{ s.status }}</span></td>
+          <td>{{ s.deckVersion ?? '—' }}</td>
+          <td>{{ s.verdict ?? '—' }}</td>
+          <td class="row-actions">
+            <button type="button"
+                    class="btn btn-small btn-secondary"
+                    (click)="openSession.emit(s.id)">Open</button>
+            <ng-container *ngIf="s.deckVersion">
+              <button type="button"
+                      class="btn btn-small btn-secondary"
+                      (click)="download.emit(s)">Download</button>
+              <!-- <button type="button"
+                      class="btn btn-small btn-primary"
+                      (click)="onPipelineSubmit(s)">Submit for approval</button> -->
+            </ng-container>
+            <!-- Adds a Rename button to each project row in the Content Pipeline. Like the sidebar button, it is disabled while deletion is in progress. -->
+            <button type="button"
+                    class="btn btn-small btn-secondary"
+                    [disabled]="deletingSessionIds.has(s.id)"
+                    (click)="renameSession.emit(s)">Rename</button>
+            <button type="button"
+                    class="btn btn-small btn-ghost"
+                    [disabled]="deletingSessionIds.has(s.id)"
+                    (click)="deleteSession.emit(s)">
+              {{ deletingSessionIds.has(s.id) ? 'Deleting…' : 'Delete' }}
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>

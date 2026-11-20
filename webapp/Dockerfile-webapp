@@ -1,0 +1,22 @@
+# Deployment build image for the SE Agent Webapp (used by CICD / se-agent-cicd-pipelines.yml).
+# Builds with the committed src/environments/environment.ts, where backendUrl='' (same
+# origin) — the app calls `/api` relative to its deployment host (window.location.origin), and
+# the ingress routes `/api` to the backend. No backend host is baked in, so one image works in
+# every environment. For a LOCAL build with localhost baked in, use Dockerfile.local instead.
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM nginx:1.27-alpine AS runtime
+# Angular emits the app under dist/<project> (see angular.json outputPath: dist/se-webapp).
+COPY --from=build /app/dist/se-webapp /usr/share/nginx/html
+# Cache policy: never cache index.html, cache hashed /assets forever (see nginx.conf).
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

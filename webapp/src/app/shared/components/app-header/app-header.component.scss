@@ -1,0 +1,253 @@
+:host {
+  display: contents;
+}
+
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 50%;
+  background: #ffffff;
+  padding: 1px;
+  flex-shrink: 0;
+}
+
+.header-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.user-profile-widget {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  padding: 3px 6px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: var(--panel-2);
+  }
+}
+
+.user-avatar-wrap {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.user-avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary, #DFC5FE);
+  color: var(--primary-text, #241442);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px var(--primary-soft);
+  transition: transform 0.15s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+.ms-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid var(--panel, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-display-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.role-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  cursor: default;
+  animation: popoverFadeIn 0.15s ease-out;
+}
+
+@keyframes popoverFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.role-popover-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.role-popover-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--primary, #DFC5FE);
+  color: var(--primary-text, #241442);
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.role-popover-info {
+  min-width: 0;
+}
+
+.role-popover-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-popover-email {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-popover-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 10px 0;
+}
+
+.role-popover-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.role-popover-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.role-badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+// Base = dark theme (default when no [data-theme] attribute is present on <html>).
+.role-badge {
+  background: var(--primary-soft);
+  color: #f5f3ff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+    border: 1px solid rgba(223, 197, 254, 0.5);
+}
+
+// Light theme override. Positive selector so it only matches when <html data-theme="light"> is a real ancestor.
+:host-context([data-theme="light"]) .role-badge {
+  // background: #EDE9FE;
+  color: #111827;
+  // border-color: rgba(139, 92, 246, 0.35);
+}
+
+.role-popover-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.status-dot-sm {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+
+  &.ok {
+    background: var(--green, #22c55e);
+    box-shadow: 0 0 0 2px var(--green-soft, rgba(34, 197, 94, 0.15));
+  }
+}
+
+.btn-logout-icon {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: 2px;
+
+  &:hover {
+    color: var(--primary, #DFC5FE);
+    background: var(--panel-2);
+    transform: translateX(1px);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+@media (max-width: 700px) {
+  .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 10px 16px 8px; }
+  .brand { min-width: 0; gap: 8px; }
+  .brand-name { white-space: nowrap; }
+  .topbar-right { grid-column: 2; grid-row: 1; gap: 8px; }
+  .user-display-name, .header-divider { display: none; }
+  .tabs { grid-column: 1 / -1; grid-row: 2; min-width: 0; margin-left: 0; gap: 24px; }
+  .tab-btn { white-space: nowrap; }
+  .tab-btn.active::after { bottom: -8px; }
+  .role-popover { max-width: calc(100vw - 48px); }
+}

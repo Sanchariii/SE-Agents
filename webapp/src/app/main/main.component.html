@@ -1,0 +1,47 @@
+<app-login *ngIf="vm.view === 'login'"
+           [loading]="vm.ssoLoading"
+           [error]="vm.loginError"
+           (signIn)="vm.onSsoLoginClick()"
+           (themeToggle)="theme.toggleTheme()"></app-login>
+
+<app-boot *ngIf="vm.view === 'boot'" [message]="vm.bootMessage"></app-boot>
+
+<div *ngIf="vm.view === 'app'" id="app-view" class="app-view">
+  <app-header [currentTab]="vm.currentTab"
+              [connState]="vm.connState"
+              [userChipText]="vm.userChipText"
+              [userChipTitle]="vm.userChipTitle"
+              [isAdmin]="vm.canViewAnalytics"
+              [userName]="vm.userName"
+              [userEmail]="vm.userEmail"
+              [userRoles]="vm.userRoles"
+              [userInitial]="vm.userInitial"
+              (tabChange)="vm.switchTab($event)"
+              (themeToggle)="theme.toggleTheme()"
+              (logout)="vm.onLogoutClick()"></app-header>
+
+  <main class="main">
+    <!-- Keep every tab mounted: switching tabs must not destroy draft/upload/stream views. -->
+    <app-training-studio></app-training-studio>
+    <!-- renameSession connects the Pipeline rename button to vm.renameProject(id, title). -->
+    <app-pipeline [hidden]="vm.currentTab !== 'pipeline'"
+                  [sessions]="vm.sessions"
+                  [deletingSessionIds]="vm.deletingSessionIds"
+                  (openSession)="vm.onOpenSession($event)"
+                  (download)="vm.onPipelineDownload($event)"
+                  (renameSession)="vm.renameProject($event.id, $event.title)"
+                  (deleteSession)="vm.deleteProject($event.id, $event.title)"></app-pipeline>
+    <app-approvals [hidden]="vm.currentTab !== 'approvals'"
+                   [rows]="vm.approvalsRows"
+                   [loadingText]="vm.approvalsLoadingText"
+                   [isAdmin]="vm.isAdmin"
+                   [filterValue]="vm.approvalsFilterValue"
+                   (filterChange)="onApprovalsFilterChange($event)"
+                   (refresh)="vm.loadApprovals()"
+                   (decision)="onDecision($event)"></app-approvals>
+    <app-analytics *ngIf="vm.canViewAnalytics" [hidden]="vm.currentTab !== 'analytics'"
+             [active]="vm.currentTab === 'analytics'"
+             [isAdmin]="vm.isAdmin"
+             (accessDenied)="vm.hideAnalytics()"></app-analytics>
+  </main>
+</div>

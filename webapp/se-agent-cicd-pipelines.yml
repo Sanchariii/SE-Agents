@@ -1,0 +1,365 @@
+trigger:
+  branches:
+    include:
+      - development
+      - qa
+      - main
+
+pr:
+  branches:
+    include:
+      - development
+      - qa
+      - main
+
+pool:
+  name: hosted_agent_azr-vml-dai-gsc-301
+
+stages:
+- stage: dev_Deployment
+  displayName: Deploy seagent Webapp Dev
+  variables:
+  - group: se-agent-dev-aksconfig
+  condition: and(always(), eq(variables['Build.SourceBranch'], 'refs/heads/development'))
+  jobs:
+  - job: DeployJob
+    displayName: Deploy Job
+    steps:
+    - task: AzureCLI@2
+      name: aksLogin
+      displayName: "AKS Login"
+      inputs:
+        azureSubscription: 'SPN-DAI-SEAGENT-D'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group $(resourceGroup) --name $(aksName) --admin --overwrite-existing
+          imageTag=$(az acr repository show-tags --name $(registryName) --repository $(imageNameWebapp) --orderby time_desc --top 1 --output tsv)
+          if [ -z "$imageTag" ]; then
+            echo "##vso[task.setvariable variable=new_imageTag;isoutput=true]0.0.0"
+          else
+            imageTag=$(echo "$imageTag" | sed 's/^v//')
+            echo "##vso[task.setvariable variable=new_imageTag;isoutput=true]$imageTag"
+          fi
+
+    - task: Bash@3
+      name: createNewTag
+      displayName: "Create New Image Tag"
+      inputs:
+        targetType: 'inline'
+        script: |
+          increment_version() {
+            local version=$1
+            IFS='.' read -r -a parts <<< "$version"
+
+            if [ ${#parts[@]} -ne 3 ]; then
+              echo "Invalid version format. Expected format: x.x.xx"
+              exit 1
+            fi
+
+            if (( parts[2] < 99 )); then
+              ((parts[2]++))
+            else
+              parts[2]=0
+              if (( parts[1] < 9 )); then
+                ((parts[1]++))
+              else
+                parts[1]=0
+                if (( parts[0] < 9 )); then
+                  ((parts[0]++))
+                else
+                  echo "Tag incorrect"
+                  exit 1
+                fi
+              fi
+            fi
+
+            new_version="${parts[0]}.${parts[1]}.${parts[2]}"
+            echo "$new_version"
+          }
+
+          imageTag=$(increment_version "$(aksLogin.new_imageTag)")
+          new_imageName="$(registryName).azurecr.io/$(imageNameWebapp):v$imageTag"
+          echo "##vso[task.setvariable variable=new_imageName;isoutput=true]$new_imageName"
+          echo "##vso[task.setvariable variable=imageTag;isoutput=true]v$imageTag"
+          echo $new_imageName
+
+    - task: AzureCLI@2
+      name: acrBuildAndPush
+      displayName: "Build and Push Image to ACR"
+      inputs:
+        azureSubscription: 'SPN-DAI-SEAGENT-D'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          set -e
+
+          echo "Logging into ACR: $(registryName)"
+          az acr login --name "$(registryName)"
+
+          echo "Building Docker image..."
+          docker build \
+            -f "$(Build.Repository.LocalPath)/$(dockerfilePathWebapp)" \
+            -t "$(createNewTag.new_imageName)" \
+            "$(Build.Repository.LocalPath)"
+
+          echo "Pushing Docker image..."
+          docker push "$(createNewTag.new_imageName)"
+
+          echo "Image successfully pushed:"
+          echo "$(createNewTag.new_imageName)"
+
+    - task: Bash@3
+      name: helmRelease
+      displayName: Helm Upgrade & Install
+      inputs:
+        targetType: 'inline'
+        script: |
+          mkdir "$(Build.BuildId)"
+          cd "$(Build.BuildId)"
+          git clone -b $(Build.SourceBranchName) https://RA-DAI-DevOps:$(System.AccessToken)@dev.azure.com/RA-DAI-DevOps/DAI-GenAI%20Infra/_git/genai-deployment-file
+          if [ $? -ne 0 ]; then
+            echo "ERROR: git clone failed"
+            exit 1
+          fi
+
+          cd genai-deployment-file
+          sed -i.bak -E "s|^\s*imageName:\s*.*$|  imageName: $(createNewTag.new_imageName)|" "$(chartNameWebapp)"
+          cat "$(chartNameWebapp)"
+          helm upgrade --install $(releaseNameWebapp) . -f "$(chartNameWebapp)" -f "$(configmapNameWebapp)" -n $(nameSpace)
+          docker system prune -a -f
+          cd ../..
+          rm -rf "$(Build.BuildId)"
+        workingDirectory: '/tmp/pipeline-temp'
+
+- stage: qa_Deployment
+  displayName: Deploy seagent Webapp QA
+  variables:
+  - group: se-agent-qa-aksconfig
+  condition: and(always(), eq(variables['Build.SourceBranch'], 'refs/heads/qa'), ne(variables['Build.Reason'], 'PullRequest'))
+  jobs:
+  - job: DeployJob
+    displayName: Deploy Job
+    steps:
+    - task: AzureCLI@2
+      name: aksLogin
+      displayName: "AKS Login"
+      inputs:
+        azureSubscription: 'SVC-DAI-SEAGENT-Q'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group $(resourceGroup) --name $(aksName) --admin --overwrite-existing
+          imageTag=$(az acr repository show-tags --name $(registryName) --repository $(imageNameWebapp) --orderby time_desc --top 1 --output tsv)
+          if [ -z "$imageTag" ]; then
+            echo "##vso[task.setvariable variable=new_imageTag;isoutput=true]0.0.0"
+          else
+            imageTag=$(echo "$imageTag" | sed 's/^v//')
+            echo "##vso[task.setvariable variable=new_imageTag;isoutput=true]$imageTag"
+          fi
+
+    - task: Bash@3
+      name: createNewTag
+      displayName: "Create New Image Tag"
+      inputs:
+        targetType: 'inline'
+        script: |
+          increment_version() {
+            local version=$1
+            IFS='.' read -r -a parts <<< "$version"
+
+            if [ ${#parts[@]} -ne 3 ]; then
+              echo "Invalid version format. Expected format: x.x.xx"
+              exit 1
+            fi
+
+            if (( parts[2] < 99 )); then
+              ((parts[2]++))
+            else
+              parts[2]=0
+              if (( parts[1] < 9 )); then
+                ((parts[1]++))
+              else
+                parts[1]=0
+                if (( parts[0] < 9 )); then
+                  ((parts[0]++))
+                else
+                  echo "Tag incorrect"
+                  exit 1
+                fi
+              fi
+            fi
+
+            new_version="${parts[0]}.${parts[1]}.${parts[2]}"
+            echo "$new_version"
+          }
+
+          imageTag=$(increment_version "$(aksLogin.new_imageTag)")
+          new_imageName="$(registryName).azurecr.io/$(imageNameWebapp):v$imageTag"
+          echo "##vso[task.setvariable variable=new_imageName;isoutput=true]$new_imageName"
+          echo "##vso[task.setvariable variable=imageTag;isoutput=true]v$imageTag"
+          echo "$new_imageName"
+
+    - task: AzureCLI@2
+      name: acrBuildAndPush
+      displayName: "Build and Push Image to ACR"
+      inputs:
+        azureSubscription: 'SVC-DAI-SEAGENT-Q'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          set -e
+
+          echo "Logging into ACR: $(registryName)"
+          az acr login --name "$(registryName)"
+
+          echo "Building Docker image..."
+          docker build \
+            -f "$(Build.Repository.LocalPath)/$(dockerfilePathWebapp)" \
+            -t "$(createNewTag.new_imageName)" \
+            "$(Build.Repository.LocalPath)"
+
+          echo "Pushing Docker image..."
+          docker push "$(createNewTag.new_imageName)"
+
+          echo "Image successfully pushed:"
+          echo "$(createNewTag.new_imageName)"
+
+    - task: Bash@3
+      name: helmRelease
+      displayName: Helm Upgrade & Install
+      inputs:
+        targetType: 'inline'
+        script: |
+          mkdir "$(Build.BuildId)"
+          cd "$(Build.BuildId)"
+          git clone -b $(Build.SourceBranchName) https://RA-DAI-DevOps:$(System.AccessToken)@dev.azure.com/RA-DAI-DevOps/DAI-GenAI%20Infra/_git/genai-deployment-file
+          if [ $? -ne 0 ]; then
+            echo "ERROR: git clone failed"
+            exit 1
+          fi
+
+          cd genai-deployment-file
+          sed -i.bak -E "s|^\s*imageName:\s*.*$|  imageName: $(createNewTag.new_imageName)|" "$(chartNameWebapp)"
+          cat "$(chartNameWebapp)"
+          helm upgrade --install $(releaseNameWebapp) . -f "$(chartNameWebapp)" -f "$(configmapNameWebapp)" -n $(nameSpace)
+          docker system prune -a -f
+          cd ../..
+          rm -rf "$(Build.BuildId)"
+        workingDirectory: '/tmp/pipeline-temp'
+
+- stage: prod_Deployment
+  displayName: Deploy seagent Webapp Prod
+  variables:
+  - group: se-agent-prod-aksconfig
+  condition: and(always(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+  jobs:
+  - job: DeployJob
+    displayName: Deploy Job
+    steps:
+    - task: AzureCLI@2
+      name: aksLogin
+      displayName: "AKS Login"
+      inputs:
+        azureSubscription: 'SVC-DAI-SEAGENT-P'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group $(resourceGroup) --name $(aksName) --admin --overwrite-existing
+          imageTag=$(az acr repository show-tags --name $(registryName) --repository $(imageNameWebapp) --orderby time_desc --top 1 --output tsv)
+          if [ -z "$imageTag" ]; then
+            echo "##vso[task.setvariable variable=new_imageTag;isoutput=true]0.0.0"
+          else
+            imageTag=$(echo "$imageTag" | sed 's/^v//')
+            echo "##vso[task.setvariable variable=new_imageTag;isoutput=true]$imageTag"
+          fi
+
+    - task: Bash@3
+      name: createNewTag
+      displayName: "Create New Image Tag"
+      inputs:
+        targetType: 'inline'
+        script: |
+          increment_version() {
+            local version=$1
+            IFS='.' read -r -a parts <<< "$version"
+
+            if [ ${#parts[@]} -ne 3 ]; then
+              echo "Invalid version format. Expected format: x.x.xx"
+              exit 1
+            fi
+
+            if (( parts[2] < 99 )); then
+              ((parts[2]++))
+            else
+              parts[2]=0
+              if (( parts[1] < 9 )); then
+                ((parts[1]++))
+              else
+                parts[1]=0
+                if (( parts[0] < 9 )); then
+                  ((parts[0]++))
+                else
+                  echo "Tag incorrect"
+                  exit 1
+                fi
+              fi
+            fi
+
+            new_version="${parts[0]}.${parts[1]}.${parts[2]}"
+            echo "$new_version"
+          }
+
+          imageTag=$(increment_version "$(aksLogin.new_imageTag)")
+          new_imageName="$(registryName).azurecr.io/$(imageNameWebapp):v$imageTag"
+          echo "##vso[task.setvariable variable=new_imageName;isoutput=true]$new_imageName"
+          echo "##vso[task.setvariable variable=imageTag;isoutput=true]v$imageTag"
+          echo "$new_imageName"
+
+    - task: AzureCLI@2
+      name: acrBuildAndPush
+      displayName: "Build and Push Image to ACR"
+      inputs:
+        azureSubscription: 'SVC-DAI-SEAGENT-P'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          set -e
+
+          echo "Logging into ACR: $(registryName)"
+          az acr login --name "$(registryName)"
+
+          echo "Building Docker image..."
+          docker build \
+            -f "$(Build.Repository.LocalPath)/$(dockerfilePathWebapp)" \
+            -t "$(createNewTag.new_imageName)" \
+            "$(Build.Repository.LocalPath)"
+
+          echo "Pushing Docker image..."
+          docker push "$(createNewTag.new_imageName)"
+
+          echo "Image successfully pushed:"
+          echo "$(createNewTag.new_imageName)"
+
+    - task: Bash@3
+      name: helmRelease
+      displayName: Helm Upgrade & Install
+      inputs:
+        targetType: 'inline'
+        script: |
+          mkdir "$(Build.BuildId)"
+          cd "$(Build.BuildId)"
+          git clone -b $(Build.SourceBranchName) https://RA-DAI-DevOps:$(System.AccessToken)@dev.azure.com/RA-DAI-DevOps/DAI-GenAI%20Infra/_git/genai-deployment-file
+          if [ $? -ne 0 ]; then
+            echo "ERROR: git clone failed"
+            exit 1
+          fi
+
+          cd genai-deployment-file
+          sed -i.bak -E "s|^\s*imageName:\s*.*$|  imageName: $(createNewTag.new_imageName)|" "$(chartNameWebapp)"
+          cat "$(chartNameWebapp)"
+          helm upgrade --install $(releaseNameWebapp) . -f "$(chartNameWebapp)" -f "$(configmapNameWebapp)" -n $(nameSpace)
+          docker system prune -a -f
+          cd ../..
+          rm -rf "$(Build.BuildId)"
+        workingDirectory: '/tmp/pipeline-temp'

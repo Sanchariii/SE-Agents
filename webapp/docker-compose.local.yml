@@ -1,0 +1,19 @@
+# Local Docker Compose for the SE Agent Webapp.
+# Build + run:  docker compose -f docker-compose.local.yml up --build -d
+# Stop:         docker compose -f docker-compose.local.yml down
+# App: http://localhost:8080  ->  Backend: http://localhost:8002
+
+services:
+  webapp:
+    container_name: se-agent-webapp
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      # Local runs always target the local backend. This value is baked into the bundle
+      # at build time; change it here (and rebuild with --build) for a one-off backend,
+      # e.g. VITE_BACKEND_URL: http://host.docker.internal:8002
+      args:
+        VITE_BACKEND_URL: http://localhost:8002
+    ports:
+      - "8080:80"
+    restart: unless-stopped

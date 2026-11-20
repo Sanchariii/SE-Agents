@@ -1,0 +1,31 @@
+# LOCAL build image for the SE Agent Webapp (used only by docker-compose.local.yml).
+# Multi-stage: build the Angular bundle with the LOCAL backend URL baked in, then serve via nginx.
+#
+# Deployment builds do NOT use this file — CICD builds Dockerfile-webapp, which keeps
+# backendUrl='' (same origin) so the app calls `/api` on its own deployment host.
+
+FROM node:20-alpine AS build
+WORKDIR /app
+
+# Backend URL baked into the bundle. Defaults to the local backend; override for a one-off
+# build with e.g. --build-arg VITE_BACKEND_URL=http://host.docker.internal:8002
+ARG VITE_BACKEND_URL="http://localhost:8002"
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+# Bake the local backend URL into the Angular environment file, then build.
+RUN echo "[build] backendUrl = $VITE_BACKEND_URL"; \
+    sed -i "s#backendUrl: '[^']*'#backendUrl: '$VITE_BACKEND_URL'#" src/environments/environment.ts; \
+    npm run build
+
+FROM nginx:1.27-alpine AS runtime
+# Angular emits the app under dist/<project> (see angular.json outputPath: dist/se-webapp).
+COPY --from=build /app/dist/se-webapp /usr/share/nginx/html
+# Cache policy: never cache index.html, cache hashed /assets forever (see nginx.conf).
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

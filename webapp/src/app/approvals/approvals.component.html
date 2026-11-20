@@ -1,0 +1,59 @@
+<section id="tab-approvals"
+         class="tab-panel active">
+  <div class="panel-header">
+    <h2>Approval Queue</h2>
+    <p class="muted">Authors submit decks; admins approve or reject.</p>
+    <div class="filter-row">
+      <select id="approvals-filter"
+              name="approvalsFilter"
+              [ngModel]="filterValue"
+              (ngModelChange)="filterChange.emit($event)">
+        <option value="">All</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+      </select>
+      <button type="button"
+              class="btn btn-secondary"
+              id="approvals-refresh"
+              (click)="refresh.emit()">Refresh</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table" id="approvals-table">
+      <thead>
+        <tr>
+          <th>Session ID</th><th>Project Title</th><th>Version</th><th>Status</th>
+          <th>Submitted by</th><th>Decided by</th><th>Note</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="approvals-body">
+        <tr *ngIf="loadingText">
+          <td colspan="7" class="muted">{{ loadingText }}</td>
+        </tr>
+        <tr *ngIf="!loadingText && !rows.length">
+          <td colspan="7" class="muted">No approvals found.</td>
+        </tr>
+        <tr *ngFor="let a of rows; trackBy: trackApprovalRow">
+          <td>{{ a.session_id }}</td>
+          <td>{{ a.project_title }}</td>
+          <td>v{{ a.deck_version }}</td>
+          <td><span class="status-pill" [ngClass]="a.status">{{ a.status }}</span></td>
+          <td>{{ a.submitted_by || '—' }}</td>
+          <td>{{ a.decided_by || '—' }}</td>
+          <td>{{ a.note || '—' }}</td>
+          <td class="row-actions">
+            <ng-container *ngIf="isAdmin && a.status === 'pending'">
+              <button type="button"
+                      class="btn btn-small btn-primary"
+                      (click)="decision.emit({ sessionId: a.session_id, deckVersion: a.deck_version, action: 'approve' })">Approve</button>
+              <button type="button"
+                      class="btn btn-small btn-secondary"
+                      (click)="decision.emit({ sessionId: a.session_id, deckVersion: a.deck_version, action: 'reject' })">Reject</button>
+            </ng-container>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>

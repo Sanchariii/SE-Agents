@@ -1,0 +1,1352 @@
+<!-- ---------- CHAT / GENERATE ---------- -->
+<section id="tab-chat" class="tab-panel" [class.active]="vm.currentTab === 'chat'">
+
+  <div #chatLayoutEl class="chat-layout" [class.sidebar-collapsed]="isSidebarCollapsed" [class.studio-collapsed]="isStudioCollapsed"
+    [style.--sidebar-w]="sidebarWidth ? sidebarWidth + 'px' : null"
+    [style.--studio-w]="studioWidth ? studioWidth + 'px' : null">
+    <!-- Collapsible Sidebar -->
+    <aside #sidebarEl class="sidebar" [class.is-collapsed]="isSidebarCollapsed">
+      <div class="sidebar-header">
+        <h2 class="sidebar-title" *ngIf="!isSidebarCollapsed">Training studio</h2>
+        <button type="button" class="sidebar-toggle-btn"
+          [title]="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          [attr.aria-label]="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" (click)="toggleSidebar()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="4" ry="4"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- "New project" Pill Button matching screenshot -->
+      <button type="button" class="btn-new-project" id="new-session-btn" *ngIf="!isSidebarCollapsed"
+        (click)="onNewProjectClick()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>New Project</span>
+      </button>
+      <button type="button" class="btn-new-project-collapsed" id="new-session-btn-collapsed" *ngIf="isSidebarCollapsed"
+        title="New Project" aria-label="New Project" (click)="onNewProjectClick()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+
+      <input #fileInputEl type="file" id="file-input" multiple hidden
+        accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,.mp4,.mov,.mkv"
+        (change)="vm.onFilesSelected($event)">
+
+      <!-- Projects Section Header / Accordion with Outline Folder Icon -->
+      <div class="project-accordion-row" *ngIf="!isSidebarCollapsed" (click)="toggleProjects()">
+        <div class="project-accordion-label">
+          <svg class="folder-icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>My Projects</span>
+        </div>
+        <svg class="accordion-chevron-svg" [class.is-collapsed]="!isProjectsExpanded" width="14" height="14"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+      <div class="collapsed-folder-icon" *ngIf="isSidebarCollapsed" title="My Projects" (click)="toggleSidebar()">
+        <svg class="folder-icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </div>
+
+      <!-- Expanded Project List -->
+      <div class="session-list" id="session-list" *ngIf="!isSidebarCollapsed && isProjectsExpanded">
+        <div *ngIf="vm.sidebarStatusLoading && !vm.sessions.length" class="empty-state small"><span class="spinner-sm"></span> Loading projects…</div>
+        <ng-container *ngIf="!(vm.sidebarStatusLoading && !vm.sessions.length)">
+        <ng-container *ngIf="vm.sessions.length; else noSessions">
+          <div *ngFor="let s of vm.sessions; trackBy: trackSessionById" class="session-item"
+            [class.active]="s.id === vm.currentSessionId" [class.deleting]="vm.deletingSessionIds.has(s.id)">
+            <div class="session-item-info" (click)="!vm.deletingSessionIds.has(s.id) && onSelectSession(s.id)">
+              <span class="sid" [title]="s.title">{{ s.title }}</span>
+              <span class="meta">{{ sessionMeta(s) }}</span>
+            </div>
+            <button type="button" class="session-delete-btn session-rename-btn"
+              title="Rename project" aria-label="Rename project"
+              [disabled]="vm.deletingSessionIds.has(s.id)" (click)="onRenameSessionClick($event, s)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+              </svg>
+            </button>
+            <button type="button" class="session-delete-btn"
+              [title]="vm.deletingSessionIds.has(s.id) ? 'Deleting…' : 'Delete project'"
+              [disabled]="vm.deletingSessionIds.has(s.id)" (click)="onDeleteSessionClick($event, s)">
+              <span *ngIf="vm.deletingSessionIds.has(s.id); else deleteX" class="spinner-sm"></span>
+              <ng-template #deleteX>×</ng-template>
+            </button>
+          </div>
+        </ng-container>
+        <ng-template #noSessions>
+          <div class="empty-state small">No projects yet</div>
+        </ng-template>
+        </ng-container>
+      </div>
+
+      <!-- Sidebar Footer with Appearance Setting -->
+      <div class="sidebar-footer" *ngIf="!isSidebarCollapsed">
+        <button type="button" class="sidebar-appearance-btn" id="appearance-btn" (click)="toggleAppearanceModal()"
+          [class.active]="isAppearanceOpen" title="Customize Theme & Chat Colors">
+          <div class="appearance-btn-left">
+            <svg class="appearance-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path
+                d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z">
+              </path>
+              <circle cx="12" cy="7" r="1.2" fill="currentColor"></circle>
+              <circle cx="7" cy="11" r="1.2" fill="currentColor"></circle>
+              <circle cx="9" cy="16" r="1.2" fill="currentColor"></circle>
+              <circle cx="15" cy="16" r="1.2" fill="currentColor"></circle>
+            </svg>
+            <span>Appearance</span>
+          </div>
+          <span class="active-swatch-dot" [style.background]="currentTheme.primary"></span>
+        </button>
+      </div>
+
+      <!-- Collapsed Sidebar Appearance Icon -->
+      <div class="sidebar-footer-collapsed" *ngIf="isSidebarCollapsed">
+        <button type="button" class="collapsed-action-btn" (click)="toggleAppearanceModal()"
+          [class.active]="isAppearanceOpen" title="Appearance">
+          <svg class="appearance-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path
+              d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z">
+            </path>
+            <circle cx="12" cy="7" r="1.2" fill="currentColor"></circle>
+            <circle cx="7" cy="11" r="1.2" fill="currentColor"></circle>
+            <circle cx="9" cy="16" r="1.2" fill="currentColor"></circle>
+            <circle cx="15" cy="16" r="1.2" fill="currentColor"></circle>
+          </svg>
+        </button>
+      </div>
+    </aside>
+    <div *ngIf="!isSidebarCollapsed" class="panel-resizer panel-resizer-sidebar" role="separator"
+      aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"
+      title="Drag to resize · double-click to reset"
+      (pointerdown)="startPanelResize($event, 'sidebar', sidebarEl)"
+      (keydown)="onPanelResizeKey($event, 'sidebar', sidebarEl)"
+      (dblclick)="setPanelWidth('sidebar', null)"></div>
+
+    <!-- Main Chat Column -->
+    <div class="chat-main">
+      <!-- Floating Right End Button to reopen collapsed Studio panel -->
+      <button type="button" class="sidebar-toggle-btn studio-toggle-floating-btn" *ngIf="isStudioCollapsed"
+        title="Expand Studio panel" aria-label="Expand Studio panel" (click)="toggleStudio()">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+      <!-- Chat Header Bar -->
+      <!-- <div class="chat-header" id="chat-header" *ngIf="vm.currentSessionId">
+        <span class="chat-header-label">CHAT</span>
+        <span class="chat-header-divider">|</span>
+        <span id="chat-session-title">{{ vm.currentSessionTitle }}</span>
+        <span class="pill" id="chat-status-pill" *ngIf="vm.statusPillText" [ngClass]="statusPillClass">{{
+          vm.statusPillText }}</span>
+      </div> -->
+
+      <!-- In-Page Appearance Settings View -->
+      <div class="inpage-appearance-view" *ngIf="isAppearanceOpen" id="inpage-appearance-view">
+        <div class="inpage-appearance-container">
+          <!-- Page Header -->
+          <div class="inpage-appearance-header">
+            <div class="inpage-appearance-header-left">
+              <div class="inpage-appearance-badge">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path
+                    d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z">
+                  </path>
+                  <circle cx="12" cy="7" r="1.2" fill="currentColor"></circle>
+                  <circle cx="7" cy="11" r="1.2" fill="currentColor"></circle>
+                  <circle cx="9" cy="16" r="1.2" fill="currentColor"></circle>
+                  <circle cx="15" cy="16" r="1.2" fill="currentColor"></circle>
+                </svg>
+              </div>
+              <div>
+                <h2>Appearance Settings</h2>
+                <p>Personalize your workspace theme accent and chat message color combination</p>
+              </div>
+            </div>
+            <button type="button" class="btn-inpage-back" (click)="closeAppearanceModal()" title="Return to chat">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+              <span>Back to Chat</span>
+            </button>
+          </div>
+
+          <!-- Highlight Notice Banner: Informs user that Dark Mode has fixed Indigo theme and customization works in Light Mode -->
+          <div class="appearance-info-banner" [class.is-dark-banner]="isDarkMode" [class.is-light-banner]="!isDarkMode">
+            <div class="banner-icon-col">
+              <span class="banner-mode-emoji" *ngIf="isDarkMode">🌙</span>
+              <span class="banner-mode-emoji" *ngIf="!isDarkMode">☀️</span>
+            </div>
+            <div class="banner-text-col">
+              <div class="banner-title" *ngIf="isDarkMode">
+                Dark Mode Active — Fixed High-Contrast Indigo Theme
+              </div>
+              <div class="banner-desc" *ngIf="isDarkMode">
+                In Dark Mode, the overall theme accent is permanently set to <strong>Vibrant Indigo (#6366f1)</strong>
+                for optimal contrast and visibility across all surfaces. Theme color customization and custom chat
+                bubble styles take effect when in <strong>Light Mode</strong>.
+              </div>
+
+              <div class="banner-title" *ngIf="!isDarkMode">
+                Light Mode Active — Theme &amp; Chat Customization Enabled
+              </div>
+              <div class="banner-desc" *ngIf="!isDarkMode">
+                Select your preferred accent color and chat bubble style. Your selections apply immediately and are
+                saved for Light Mode.
+              </div>
+            </div>
+            <div class="banner-badge-col" *ngIf="isDarkMode">
+              <span class="banner-lock-pill">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                Light Mode Only
+              </span>
+            </div>
+          </div>
+
+          <!-- Section 1: Overall Theme Color -->
+          <div class="inpage-appearance-card">
+            <div class="appearance-section-heading">
+              <div class="section-title-row">
+                <h4>Overall Theme Color</h4>
+                <span *ngIf="isDarkMode" class="section-status-pill locked">🔒 Fixed to Indigo in Dark Mode</span>
+                <span *ngIf="!isDarkMode" class="section-status-pill active">Active in Light Mode</span>
+              </div>
+              <span class="appearance-section-desc">Customize primary buttons, navigation highlights, active indicators,
+                and accents across the application (available in Light Mode)</span>
+            </div>
+
+            <!-- Dark Mode Active Theme Highlight Card -->
+            <div *ngIf="isDarkMode" class="dark-locked-theme-banner">
+              <div class="dark-locked-left">
+                <span class="swatch-circle" style="background: #6366f1; box-shadow: 0 0 14px rgba(99, 102, 241, 0.45);">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </span>
+                <div class="dark-locked-info">
+                  <span class="dark-locked-name">Vibrant Indigo (#6366f1)</span>
+                  <span class="dark-locked-sub">Permanent dark mode accent color, highly visible and optimized for UX
+                    contrast. Cannot be changed in Dark Mode.</span>
+                </div>
+              </div>
+              <span class="swatch-active-pill light-blue-pill">Active in Dark Mode</span>
+            </div>
+
+            <div class="theme-swatches-grid" [class.is-mode-locked]="isDarkMode">
+              <button *ngFor="let t of themeColorOptions; trackBy: trackByString" type="button"
+                class="theme-swatch-card" [class.active]="!isDarkMode && selectedThemeId === t.id"
+                [class.is-locked]="isDarkMode" [disabled]="isDarkMode"
+                [title]="isDarkMode ? 'Theme changes only work in Light Mode' : 'Select ' + t.name"
+                (click)="selectThemeColor(t.id)">
+                <div class="swatch-left">
+                  <span class="swatch-circle" [style.background]="t.primary" [style.box-shadow]="'0 2px 8px ' + t.soft">
+                    <svg *ngIf="!isDarkMode && selectedThemeId === t.id" width="12" height="12" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+                      [style.stroke]="t.primaryText">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  </span>
+                  <span class="swatch-name">{{ t.name }}</span>
+                </div>
+                <span *ngIf="!isDarkMode && selectedThemeId === t.id" class="swatch-active-pill">Active</span>
+                <span *ngIf="isDarkMode" class="swatch-lock-icon" title="Light mode only">🔒</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 2: Font Style — applies globally in both light and dark mode -->
+          <div class="inpage-appearance-card">
+            <div class="appearance-section-heading">
+              <div class="section-title-row">
+                <h4>Font Style</h4>
+                <span class="section-status-pill active">Active in Light &amp; Dark Mode</span>
+              </div>
+              <span class="appearance-section-desc">Choose the typeface used across the entire application. Selection
+                is saved and applies immediately in both themes.</span>
+            </div>
+            <div class="font-styles-grid">
+              <button *ngFor="let f of fontOptions; trackBy: trackByString" type="button" class="font-style-card"
+                [class.active]="selectedFontId === f.id" [title]="'Select ' + f.name" (click)="selectFont(f.id)">
+                <div class="font-preview-box" [style.font-family]="f.stack">
+                  <span class="font-preview-sample">{{ f.sample }}</span>
+                  <span class="font-preview-line">The quick brown fox jumps over the lazy dog</span>
+                </div>
+                <div class="font-style-info">
+                  <div class="font-style-name-row">
+                    <span class="font-style-name" [style.font-family]="f.stack">{{ f.name }}</span>
+                    <span *ngIf="selectedFontId === f.id" class="style-check-badge">Active</span>
+                  </div>
+                  <span class="font-style-desc">{{ f.description }}</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 3: Chat Bubble Style -->
+          <div class="inpage-appearance-card">
+            <div class="appearance-section-heading">
+              <div class="section-title-row">
+                <h4>Chat Bubble Style</h4>
+                <span *ngIf="isDarkMode" class="section-status-pill locked">🔒 Works Only in Light Mode</span>
+                <span *ngIf="!isDarkMode" class="section-status-pill active">Active in Light Mode</span>
+              </div>
+              <span class="appearance-section-desc">Choose a pair of clean, light colors for user prompts and agent
+                responses. Note: Custom chat bubble combinations only apply in Light Mode.</span>
+            </div>
+            <div class="chat-styles-grid" [class.is-mode-locked]="isDarkMode">
+              <button *ngFor="let c of chatStyleOptions; trackBy: trackByString" type="button" class="chat-style-card"
+                [class.active]="!isDarkMode && selectedChatStyleId === c.id" [class.is-locked]="isDarkMode"
+                [disabled]="isDarkMode"
+                [title]="isDarkMode ? 'Chat bubble styles only work in Light Mode' : 'Select ' + c.name"
+                (click)="selectChatStyle(c.id)">
+                <!-- Mini Chat Preview Box -->
+                <div class="chat-preview-box">
+                  <div class="preview-user-bubble" [style.background]="c.userBg" [style.color]="c.userText"
+                    [style.border]="'1px solid ' + c.userBorder">
+                    <span>User prompt</span>
+                  </div>
+                  <div class="preview-agent-bubble" [style.background]="c.agentBg" [style.color]="c.agentText"
+                    [style.border]="'1px solid ' + c.agentBorder">
+                    <span>Agent reply</span>
+                  </div>
+                </div>
+                <div class="chat-style-info">
+                  <div class="chat-style-name-row">
+                    <span class="chat-style-name">{{ c.name }}</span>
+                    <span *ngIf="!isDarkMode && selectedChatStyleId === c.id" class="style-check-badge">Active</span>
+                    <span *ngIf="isDarkMode" class="style-lock-pill">Light Mode</span>
+                  </div>
+                  <span class="chat-style-desc">{{ c.description }}</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 4: Live Interactive Preview -->
+          <div class="inpage-appearance-card inpage-preview-card">
+            <div class="appearance-section-heading">
+              <h4>Live Conversation Preview</h4>
+              <span class="appearance-section-desc">Real-time preview of how your conversation messages appear with
+                avatars</span>
+            </div>
+            <div class="live-conversation-box">
+              <div class="chat-row chat-row-user">
+                <div class="msg msg-user">Can you generate an executive summary presentation for our motor condition
+                  monitoring project?</div>
+                <div class="chat-avatar chat-avatar-user" [title]="userName" [attr.aria-label]="userName">
+                  {{ userInitials }}
+                </div>
+              </div>
+              <div class="chat-row chat-row-assistant">
+                <div class="chat-avatar chat-avatar-assistant" title="AI Assistant">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                    <circle cx="8.5" cy="8.5" r="1" fill="currentColor"></circle>
+                    <circle cx="15.5" cy="8.5" r="1" fill="currentColor"></circle>
+                  </svg>
+                </div>
+                <div class="msg msg-assistant md-body">
+                  I've created the executive deck from your uploaded documents. It details vibration trends, bearing
+                  heat thresholds, and automated anomaly alerts.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Return Action Footer -->
+          <!-- <div class="inpage-appearance-footer">
+            <button type="button" class="btn-inpage-done" (click)="closeAppearanceModal()">
+              Save & Return to Chat
+            </button>
+          </div> -->
+        </div>
+      </div>
+
+      <!-- Initial App Load Empty-State: Welcome Card matching user screenshot -->
+      <div class="chat-welcome chat-initial-empty" *ngIf="!isAppearanceOpen && hasNoProject">
+        <div class="welcome-card-wrapper">
+          <!-- Main Banner Card -->
+          <div class="welcome-banner-card">
+            <div class="welcome-card-left">
+              <div class="welcome-model-badge" title="SE Agents Studio">
+                <svg class="star-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon
+                    points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                  </polygon>
+                </svg>
+              </div>
+
+              <div class="welcome-card-content">
+                <div class="welcome-heading-row">
+                  <h2 class="welcome-heading">
+                    <span *ngIf="userFirstName" class="welcome-user-greet">Hi {{ userFirstName }},</span>
+                    <span class="welcome-to-text">Welcome to</span>
+                    <span class="highlight-brand">SE Agents</span>
+                    <span class="sparkle" aria-hidden="true">✨</span>
+                  </h2>
+                  <span class="live-pill">
+                    <span class="live-dot"></span> Live
+                  </span>
+                </div>
+                <p class="welcome-desc">
+                  Create a project to start generating professional training decks from your documents.
+                </p>
+              </div>
+            </div>
+
+            <div class="welcome-card-right">
+              <button type="button" class="btn-new-project-hero" (click)="onNewProjectClick()">
+                + New Project
+              </button>
+            </div>
+          </div>
+
+          <!-- Disabled / Placeholder Composer Bar -->
+          <div class="welcome-disabled-composer" (click)="onNewProjectClick()"
+            title="Create a project to start chatting">
+            <span class="welcome-composer-plus">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </span>
+            <span class="welcome-composer-placeholder">Create a project to start chatting...</span>
+            <span class="welcome-composer-send" aria-label="Send message">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty / Welcome state: Centered composer with prompt suggestions -->
+      <div class="chat-welcome" *ngIf="!isAppearanceOpen && !hasNoProject && isChatEmpty">
+        <div class="chat-welcome-inner">
+          <!-- In-Studio Greeting Card (Matching Mockup Screenshot 2) -->
+          <div class="welcome-banner-card studio-greeting-card">
+            <div class="welcome-card-left">
+              <div class="welcome-model-badge" title="SE Agents Studio">
+                <svg class="star-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon
+                    points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                  </polygon>
+                </svg>
+              </div>
+
+              <div class="welcome-card-content">
+                <div class="welcome-card-meta">
+                  <!-- <span class="live-pill">
+                    <span class="live-dot"></span> Live
+                  </span> -->
+                </div>
+                <h2 class="welcome-heading">
+                  <span>{{ greetingText }},</span>
+                  <span class="highlight-brand">{{ userFirstName }}</span>
+                  <span class="sparkle" aria-hidden="true">✨</span>
+                </h2>
+                <p class="welcome-desc">
+                  Your AI-powered assistant for training decks. Ask anything, explore prompts, or upload a document to
+                  get started.
+                </p>
+              </div>
+            </div>
+
+            <div class="welcome-card-right">
+              <button type="button" class="btn-prompt-marketplace" (click)="scrollToSuggestions()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+                  <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+                  <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+                  <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+                </svg>
+                <span>SE Agents</span>
+              </button>
+            </div>
+          </div>
+
+          <ng-container *ngTemplateOutlet="pendingBarTpl"></ng-container>
+          <ng-container *ngTemplateOutlet="composerTpl"></ng-container>
+          <div class="suggestions-header-label">SUGGESTED</div>
+          <div class="suggestions">
+            <button type="button" class="suggestion-card" *ngFor="let s of chatSuggestions; trackBy: trackByIndex"
+              (click)="applySuggestion(s.prompt)">
+              <div class="suggestion-card-left">
+                <div class="suggestion-icon-wrap" [ngClass]="'badge-' + s.color" aria-hidden="true">
+                  <!-- Structured Training Deck: Graduation Cap -->
+                  <svg *ngIf="s.header.includes('Structured')" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+                    <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+                  </svg>
+                  <!-- Technical Content Deck: Wrench / Tools -->
+                  <svg *ngIf="s.header.includes('Technical')" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                      d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z">
+                    </path>
+                  </svg>
+                  <!-- Teach-Back Learning Deck: Chat Bubble -->
+                  <svg *ngIf="s.header.includes('Teach')" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                  <!-- Presentation Outline Deck: Chart Bars -->
+                  <svg *ngIf="s.header.includes('Outline') || s.header.includes('Presentation')" width="20" height="20"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                  </svg>
+                  <!-- Reference Design Deck: Palette -->
+                  <svg *ngIf="s.header.includes('Reference')" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22a10 10 0 1 1 10-10c0 2.2-1.8 3-3.5 3H16a2 2 0 0 0-1.5 3.3A2 2 0 0 1 12 22z"></path>
+                    <circle cx="7.5" cy="10.5" r="1.2"></circle>
+                    <circle cx="12" cy="7" r="1.2"></circle>
+                    <circle cx="16.5" cy="10.5" r="1.2"></circle>
+                  </svg>
+                  <span
+                    *ngIf="!s.header.includes('Structured') && !s.header.includes('Technical') && !s.header.includes('Teach') && !s.header.includes('Outline') && !s.header.includes('Reference')"
+                    class="suggestion-icon">{{ s.icon }}</span>
+                </div>
+                <div class="suggestion-text-wrap">
+                  <span class="suggestion-title">{{ s.header }}</span>
+                  <span class="suggestion-desc">{{ s.desc }}</span>
+                </div>
+              </div>
+              <svg class="suggestion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active conversation with differentiated Human and AI chat avatars -->
+      <ng-container *ngIf="!isAppearanceOpen && !isChatEmpty && !hasNoProject">
+        <div #messagesEl class="messages" id="messages" (scroll)="onMessagesScroll()">
+          <ng-container *ngIf="vm.messagesLoading">
+            <div class="loading-state" [class.small]="vm.resumingRun"><span class="spinner-sm"></span>{{ vm.resumingRun ? 'Loading earlier messages…' : 'Loading…' }}</div>
+            <!-- The project is mid-build: say so right away instead of waiting for history + run reconnect -->
+            <ng-container *ngIf="vm.resumingRun">
+              <ng-container *ngTemplateOutlet="thoughtGroupTpl; context: { turn: vm.resumePreview || vm.resumePlaceholder, live: true }">
+              </ng-container>
+            </ng-container>
+          </ng-container>
+          <ng-container *ngIf="!vm.messagesLoading && vm.messagesErrorText">
+            <div class="empty-state">{{ vm.messagesErrorText }}</div>
+          </ng-container>
+          <ng-container *ngIf="!vm.messagesLoading && !vm.messagesErrorText">
+            <div class="load-older-row" *ngIf="vm.hasMoreOlderMessages || vm.loadingOlderMessages">
+              <button type="button" class="btn btn-small btn-ghost load-older-btn"
+                [disabled]="vm.loadingOlderMessages" (click)="loadOlderMessages()">
+                <span class="spinner-sm" *ngIf="vm.loadingOlderMessages"></span>
+                {{ vm.loadingOlderMessages ? 'Loading earlier messages…' : 'Load earlier messages' }}
+              </button>
+            </div>
+            <ng-container *ngFor="let m of vm.messagesForCurrent; trackBy: trackByIndex">
+              <!-- Human Message with User Avatar on the right -->
+              <div *ngIf="m.role === 'user'" class="chat-row chat-row-user">
+                <div class="msg-user-col">
+                  <div class="msg msg-user">{{ userBubbleText(m.content) }}</div>
+                  <span class="run-status-badge is-stopped" *ngIf="m.run_status === 'CANCELLED'">Stopped</span>
+                  <span class="run-status-badge is-failed" *ngIf="m.run_status === 'FAILED'">Failed</span>
+                </div>
+                <div class="chat-avatar chat-avatar-user" [title]="userName" [attr.aria-label]="userName">
+                  {{ userInitials }}
+                </div>
+              </div>
+
+              <!-- AI Response with AI Avatar on the left -->
+              <div *ngIf="m.role === 'assistant' || m.role === 'system'" class="chat-row chat-row-assistant">
+                <div class="chat-avatar chat-avatar-assistant" title="AI Assistant" aria-label="Assistant">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                    <circle cx="8.5" cy="8.5" r="1" fill="currentColor"></circle>
+                    <circle cx="15.5" cy="8.5" r="1" fill="currentColor"></circle>
+                  </svg>
+                </div>
+                <div class="msg-assistant-col">
+                  <div #msgBody class="msg msg-assistant md-body"
+                    [innerHTML]="markdown.renderMarkdown(vm.displayContentFor(m), { plan: m.result?.awaiting_approval === true })"></div>
+                  <!-- Structured questions: interactive while awaited, a read-only recap once answered -->
+                  <app-question-form *ngIf="m === vm.activeQuestionMessage && !vm.questionFormLive && vm.questionForm"
+                    class="qform-host" [form]="vm.questionForm!" [busy]="vm.composerBusy"
+                    (submitted)="vm.submitQuestionAnswers()"></app-question-form>
+                  <div class="qform-summary" *ngIf="vm.questionSummaries.get(m) as summary" aria-label="Your answers">
+                    <span class="qform-summary-title">Answered</span>
+                    <span class="qform-summary-item" *ngFor="let e of summary.entries; trackBy: trackByIndex">
+                      <span class="qform-summary-label">{{ e.label }}:</span> {{ e.value }}
+                    </span>
+                  </div>
+                  <div class="msg-actions plan-approve-row" *ngIf="m === vm.approveHostMessage">
+                    <button type="button" class="btn btn-primary btn-small plan-approve-btn" [disabled]="vm.composerBusy"
+                      [title]="vm.composerBusy ? 'Wait for the current run to finish' : 'Build the deck from this plan'"
+                      (click)="vm.approvePlan()">Approve plan</button>
+                    <span class="plan-approve-hint">or tell me what to change</span>
+                  </div>
+                  <div class="msg-feedback-bar" *ngIf="canPreviewMessage(m)">
+                    <button type="button" class="msg-icon-btn" [class.is-done]="copiedMessage === m"
+                      [title]="copiedMessage === m ? 'Copied' : 'Copy'" aria-label="Copy slide details"
+                      (click)="copyMessage(m, msgBody)">
+                      <svg *ngIf="copiedMessage !== m; else copiedIcon" viewBox="0 0 24 24" width="15" height="15" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                    <ng-container *ngIf="messageFeedback(m) as fb">
+                      <button type="button" class="msg-icon-btn is-up"
+                        [class.active]="fb.thumbsUp === true && (fb.status === 'saved' || isFeedbackPopoverFor(m))"
+                        [attr.aria-pressed]="fb.thumbsUp === true"
+                        [disabled]="fb.status === 'loading' || fb.status === 'submitting' || (fb.status === 'saved' && !fb.thumbsUp)"
+                        [class.is-locked]="fb.status === 'saved'"
+                        [title]="feedbackThumbTitle(fb, true)" aria-label="Thumbs up"
+                        (click)="rateMessage($event, m, true)">
+                        <ng-container *ngTemplateOutlet="thumbUpIcon"></ng-container>
+                      </button>
+                      <button type="button" class="msg-icon-btn is-down"
+                        [class.active]="fb.thumbsUp === false && (fb.status === 'saved' || isFeedbackPopoverFor(m))"
+                        [attr.aria-pressed]="fb.thumbsUp === false"
+                        [disabled]="fb.status === 'loading' || fb.status === 'submitting' || (fb.status === 'saved' && fb.thumbsUp)"
+                        [class.is-locked]="fb.status === 'saved'"
+                        [title]="feedbackThumbTitle(fb, false)" aria-label="Thumbs down"
+                        (click)="rateMessage($event, m, false)">
+                        <ng-container *ngTemplateOutlet="thumbDownIcon"></ng-container>
+                      </button>
+                    </ng-container>
+                  </div>
+                  <div class="msg-actions" *ngIf="canPreviewMessage(m)">
+                    <!-- <button type="button" class="btn btn-small btn-primary preview-deck-btn"
+                      (click)="previewDeckFromMessage(m)" title="Preview the slides without downloading">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                      Preview slides
+                    </button> -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Thought group inside chat flow -->
+              <ng-container *ngIf="m.role === 'thought'">
+                <ng-container
+                  *ngTemplateOutlet="thoughtGroupTpl; context: { turn: thoughtTurnFor(m), live: false }">
+                </ng-container>
+              </ng-container>
+            </ng-container>
+
+            <!-- Live thought turn -->
+            <ng-container *ngIf="!vm.liveTurn && vm.resumingRun">
+              <ng-container *ngTemplateOutlet="thoughtGroupTpl; context: { turn: vm.resumePreview || vm.resumePlaceholder, live: true }">
+              </ng-container>
+            </ng-container>
+            <ng-container *ngIf="vm.liveTurn">
+              <ng-container *ngTemplateOutlet="thoughtGroupTpl; context: { turn: vm.liveTurn, live: true }">
+              </ng-container>
+              <!-- Questions streamed by the running turn; submit unlocks once it finishes -->
+              <div class="qform-live" *ngIf="vm.questionFormLive && vm.questionForm">
+                <app-question-form class="qform-host" [form]="vm.questionForm!" [live]="true" [busy]="vm.composerBusy">
+                </app-question-form>
+              </div>
+            </ng-container>
+          </ng-container>
+        </div>
+        <ng-container *ngTemplateOutlet="pendingBarTpl"></ng-container>
+        <div class="composer-dock">
+          <ng-container *ngTemplateOutlet="composerTpl"></ng-container>
+        </div>
+      </ng-container>
+    </div>
+
+    <!-- Queued messages -->
+    <ng-template #pendingBarTpl>
+      <div class="pending-bar" id="pending-bar" *ngIf="vm.pendingMessagesForCurrent.length" aria-label="Queued messages">
+        <div class="pending-bar-title">
+          Queued · {{ vm.composerBusy ? 'sends when the agent finishes' : 'sending next…' }}
+        </div>
+        <div *ngFor="let msg of vm.pendingMessagesForCurrent; let i = index; trackBy: trackByIndex" class="pending-msg">
+          <span class="pending-msg-index">{{ i + 1 }}</span>
+          <span class="pending-msg-text" [title]="msg">{{ msg }}</span>
+          <button type="button" class="pending-msg-cancel" title="Remove from queue" aria-label="Remove from queue"
+            (click)="vm.cancelPendingMessage(vm.currentSessionId!, i)">×</button>
+        </div>
+      </div>
+    </ng-template>
+
+    <!-- Shared composer used by both welcome and docked states -->
+    <ng-template #composerTpl>
+      <div class="composer-suggestions"
+        *ngIf="!isChatEmpty && !vm.messagesLoading && !vm.composerBusy && !vm.composerQueued && !vm.liveTurn"
+        role="group" aria-label="Suggested deck prompts">
+        <button type="button" class="btn btn-small btn-ghost composer-suggestion"
+          *ngFor="let suggestion of chatSuggestions; trackBy: trackByIndex"
+          [title]="suggestion.desc" [attr.aria-description]="suggestion.desc"
+          (click)="applySuggestion(suggestion.prompt)">{{ suggestion.header }}</button>
+      </div>
+      <div class="run-notice" id="run-notice" *ngIf="!hasNoProject && vm.runNotice as notice"
+        [ngClass]="'tone-' + notice.tone" role="status" aria-live="polite">
+        <span class="spinner-sm" *ngIf="!notice.dismissible" aria-hidden="true"></span>
+        <span class="run-notice-text">{{ notice.text }}</span>
+        <button type="button" class="btn btn-small btn-ghost run-notice-action" id="run-reconnect-btn"
+          *ngIf="notice.action === 'reconnect'" (click)="vm.onReconnectNowClick()">Reconnect now</button>
+        <button type="button" class="btn btn-small btn-secondary run-notice-action" id="run-try-again-btn"
+          *ngIf="notice.action === 'try-again'" [disabled]="vm.composerBusy"
+          (click)="vm.onTryAgainClick()">Try again</button>
+        <button type="button" class="run-notice-dismiss" *ngIf="notice.dismissible" title="Dismiss"
+          aria-label="Dismiss" (click)="vm.dismissRunNotice()">×</button>
+      </div>
+      <div class="run-notice tone-warning" id="autopilot-notice" *ngIf="!hasNoProject && vm.autopilotHaltedForCurrent"
+        role="status" aria-live="polite">
+        <span class="run-notice-text">Autopilot turned off — the assistant kept asking after several automatic replies.
+          Please review its latest message and reply yourself.</span>
+        <button type="button" class="run-notice-dismiss" title="Dismiss" aria-label="Dismiss"
+          (click)="vm.dismissAutopilotNotice()">×</button>
+      </div>
+      <form class="composer" [class.is-expanded]="vm.composerExpanded" (ngSubmit)="vm.onChatSubmit()">
+        <!-- Add-source (+) button -->
+        <button type="button" class="composer-add" title="Add a source" aria-label="Add a source"
+          [disabled]="hasNoProject" (click)="onAddSourceClick()">+</button>
+        <textarea #composerEl id="chat-input" name="chatInput" class="composer-input" rows="1"
+          placeholder="{{ hasNoProject ? 'Create a project to start chatting' : vm.composerPlaceholder }}"
+          autocomplete="off" [disabled]="hasNoProject" [style.height.px]="vm.composerHeight"
+          [(ngModel)]="vm.chatInputValue" (input)="autoGrowComposer($event)"
+          (keydown)="onComposerKeydown($event)"></textarea>
+        <button type="button" class="composer-autopilot" id="chat-autopilot-btn" [class.is-on]="vm.autopilotForCurrent"
+          [attr.aria-pressed]="vm.autopilotForCurrent" [disabled]="hasNoProject" (click)="vm.toggleAutopilot()"
+          [title]="vm.autopilotForCurrent
+            ? 'Autopilot is on — questions are answered and plans approved automatically. Click to turn off.'
+            : 'Turn on autopilot to answer questions and approve plans automatically'">
+          <span class="composer-autopilot-dot" aria-hidden="true"></span>
+          Autopilot
+        </button>
+        <button type="button" class="composer-action" id="chat-stop-btn" *ngIf="vm.runControls.stop !== 'hidden'"
+          [disabled]="vm.runControls.stop !== 'enabled'" (click)="vm.onStopClick()"
+          [attr.aria-busy]="vm.runControls.stop === 'stopping' ? 'true' : 'false'"
+          [attr.aria-label]="vm.runControls.stop === 'stopping' ? 'Stopping' : vm.runControls.stop === 'completing' ? 'Finishing the deck' : 'Stop generating'"
+          [title]="vm.runControls.stop === 'completing' ? 'The deck is being saved and can no longer be stopped' : vm.runControls.stop === 'stopping' ? 'Stopping…' : 'Stop this generation'">
+          <svg *ngIf="vm.runControls.stop === 'enabled'" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <rect x="5" y="5" width="14" height="14" rx="3" fill="currentColor"></rect>
+          </svg>
+          <span *ngIf="vm.runControls.stop !== 'enabled'" class="btn-spinner" aria-hidden="true"></span>
+        </button>
+        <!-- While the agent works, Send queues the prompt; it goes out once the run finishes -->
+        <button type="submit" class="composer-action" id="chat-send-btn"
+          [attr.aria-label]="vm.composerBusy || vm.composerQueued ? 'Queue message' : 'Send message'"
+          [disabled]="hasNoProject || !(vm.chatInputValue || '').trim()"
+          [class.is-queue]="vm.composerBusy || vm.composerQueued"
+          [title]="hasNoProject ? 'Create a project first' : vm.composerTitle">
+          <svg class="send-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+      </form>
+    </ng-template>
+
+    <!-- Right Studio Panel -->
+    <ng-container *ngIf="!isStudioCollapsed">
+    <div class="panel-resizer panel-resizer-studio" role="separator"
+      aria-orientation="vertical" aria-label="Resize studio panel" tabindex="0"
+      title="Drag to resize · double-click to reset"
+      (pointerdown)="startPanelResize($event, 'studio', studioEl)"
+      (keydown)="onPanelResizeKey($event, 'studio', studioEl)"
+      (dblclick)="setPanelWidth('studio', null)"></div>
+    <aside #studioEl class="studio-panel">
+      <div class="panel-header-row">
+        <div class="panel-title">Studio</div>
+        <button type="button" class="sidebar-toggle-btn studio-toggle-btn" title="Collapse Studio panel"
+          aria-label="Collapse Studio panel" (click)="toggleStudio()">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+      <!-- Sources Section -->
+      <section class="studio-section sources-section" aria-labelledby="sources-heading">
+        <div class="studio-section-header section-label-row">
+          <div class="studio-section-title-wrap">
+            <svg class="studio-section-icon" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+            <h3 id="sources-heading" class="studio-section-title section-label">Sources</h3>
+            <span class="studio-count-badge" *ngIf="vm.studioInputsRows.length"
+              [attr.aria-label]="vm.studioInputsRows.length + ' sources'">{{ vm.studioInputsRows.length }}</span>
+            <span class="sources-info" tabindex="0" role="button" aria-describedby="sources-info-popover">
+              <svg class="sources-info-icon" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <div class="sources-info-popover" id="sources-info-popover" role="tooltip">
+                <div class="sources-info-title">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                  Supported file formats
+                </div>
+                <div class="sources-info-formats">
+                  <span class="sources-info-chip" *ngFor="let ext of acceptedFileFormats; trackBy: trackByString">{{ ext }}</span>
+                </div>
+                <div class="sources-info-limit">Up to <strong>{{ maxUploadSizeLabel }}</strong> per file</div>
+              </div>
+            </span>
+          </div>
+          <button type="button" class="btn-add-source add-source-link" id="add-source-link" [disabled]="hasNoProject"
+            [title]="hasNoProject ? 'Create a project first' : 'Add source document'" (click)="onAddSourceClick()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Add</span>
+          </button>
+        </div>
+
+        <!-- Live upload/ingestion status indicator -->
+        <div #ingestListEl class="input-status" id="input-status" *ngIf="latestIngestEvent as evt">
+          <div class="thought-row">
+            <span class="thought-icon" [ngClass]="thoughtIconClass(evt)">{{ thoughtIcon(evt) }}</span>
+            <span class="thought-agent">[{{ evt.agent || '' }}]</span>
+            <span class="thought-msg" [ngClass]="thoughtIconClass(evt)">{{ evt.message || '' }}</span>
+          </div>
+        </div>
+
+        <!-- Sources List with Loading & INDEXED Status Badges -->
+        <div class="input-list" id="input-list">
+          <ng-container *ngIf="vm.studioInputsRows.length; else noSources">
+            <div *ngFor="let d of vm.studioInputsRows; trackBy: trackDocByKey" class="doc-item"
+              [class.deleting]="vm.isDocDeleting(d)"
+              [attr.data-key]="d._pid || d.doc_id || null">
+              <div class="doc-row">
+                <div class="doc-name-cell" [attr.title]="docTitle(d)">
+                  <span *ngIf="isDocProcessing(d)" class="spinner-sm doc-spinner"></span>
+                  <span class="doc-filename">{{ d.filename || 'Source Document' }}</span>
+                </div>
+                <span class="doc-status" [ngClass]="docStatusClass(d)" [attr.title]="docStatusText(d)">
+                  {{ (d.status === 'failed' || d.status === 'error') ? 'Failed' : docStatusLabel(d) }}
+                </span>
+                <button *ngIf="d.doc_id && !isDocProcessing(d)" type="button" class="doc-delete-btn"
+                  [title]="vm.isDocDeleting(d) ? 'Deleting…' : vm.isGenerating(d.session_id || vm.currentSessionId) ? 'Available once deck creation is complete' : 'Delete source'"
+                  [attr.aria-label]="'Delete source ' + d.filename"
+                  [disabled]="vm.isDocDeleting(d) || vm.isGenerating(d.session_id || vm.currentSessionId)" (click)="vm.deleteSourceDoc(d)">
+                  <span *ngIf="vm.isDocDeleting(d); else deleteDocIcon" class="spinner-sm"></span>
+                  <ng-template #deleteDocIcon>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                      <path d="M10 11v6"></path>
+                      <path d="M14 11v6"></path>
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                    </svg>
+                  </ng-template>
+                </button>
+              </div>
+              <!-- Dedicated responsive error container when document processing / upload fails -->
+              <div *ngIf="(d.status === 'failed' || d.status === 'error') && d.error" class="doc-error-container"
+                [attr.title]="d.error">
+                <svg class="doc-error-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span class="doc-error-text">{{ d.error }}</span>
+              </div>
+            </div>
+          </ng-container>
+          <ng-template #noSources>
+            <div class="empty-state small studio-empty-state">No sources yet.</div>
+          </ng-template>
+        </div>
+      </section>
+
+      <!-- Visual Separation Divider between Sources and Outputs -->
+      <div class="studio-divider" role="separator" aria-hidden="true"></div>
+
+      <!-- Outputs Section -->
+      <section class="studio-section outputs-section" aria-labelledby="outputs-heading">
+        <button type="button" class="studio-section-header section-label-row studio-section-toggle"
+          [attr.aria-expanded]="isOutputsExpanded" (click)="toggleOutputs()">
+          <div class="studio-section-title-wrap">
+            <svg class="studio-section-icon" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <h3 id="outputs-heading" class="studio-section-title section-label">Outputs</h3>
+            <span class="studio-count-badge" *ngIf="vm.studioOutputs && vm.studioOutputs.length"
+              [attr.aria-label]="vm.studioOutputs.length + ' outputs'">{{ vm.studioOutputs.length }}</span>
+          </div>
+          <svg class="accordion-chevron-svg" [class.is-collapsed]="!isOutputsExpanded" width="14" height="14"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <div class="output-list" id="output-list" *ngIf="isOutputsExpanded">
+          <ng-container *ngIf="vm.studioOutputsLoading">
+            <div class="loading-state small"><span class="spinner-sm"></span>Loading…</div>
+          </ng-container>
+          <ng-container *ngIf="!vm.studioOutputsLoading">
+            <ng-container *ngIf="vm.studioOutputs && vm.studioOutputs.length; else noOutputs">
+              <div *ngFor="let v of vm.studioOutputs; trackBy: trackVersionByDeckVersion" class="output-card"
+                [class.deleting]="vm.isVersionDeleting(v._sid, v.deck_version)">
+                <div class="output-card-head">
+                  <div class="output-title">{{ v.plan_title || 'Training deck' }}</div>
+                  <button type="button" class="output-delete-btn"
+                    [title]="vm.isVersionDeleting(v._sid, v.deck_version) ? 'Deleting…' : 'Delete version'"
+                    [attr.aria-label]="'Delete version ' + v.deck_version"
+                    [disabled]="vm.isVersionDeleting(v._sid, v.deck_version)"
+                    (click)="vm.deleteDeckVersion(v)">
+                    <span *ngIf="vm.isVersionDeleting(v._sid, v.deck_version); else deleteVersionIcon" class="spinner-sm"></span>
+                    <ng-template #deleteVersionIcon>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                        <path d="M10 11v6"></path>
+                        <path d="M14 11v6"></path>
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                      </svg>
+                    </ng-template>
+                  </button>
+                </div>
+                <div class="output-meta">v{{ v.deck_version }} · {{ v.theme || 'Internal' }} · {{ v.status }}<span *ngIf="formatStamp(v.created_at) as stamp" class="output-stamp"> · {{ stamp }}</span><span *ngIf="vm.deckDurationFor(v._sid, v.deck_version) as ms" class="output-duration" title="Time taken to build this version"> · Built in {{ formatDuration(ms) }}</span></div>
+                <div class="output-actions">
+                  <button *ngFor="let lang of v._languages; trackBy: trackByString" type="button"
+                    class="btn btn-small btn-secondary lang-btn lang-menu-btn"
+                    [class.is-loading]="vm.isDownloadBusy(v._sid, v.deck_version, lang)"
+                    [class.menu-open]="outputMenuKey === outputMenuKeyFor(v, lang)"
+                    [disabled]="vm.isDownloadBusy(v._sid, v.deck_version, lang)"
+                    [attr.aria-haspopup]="'menu'"
+                    [attr.aria-expanded]="outputMenuKey === outputMenuKeyFor(v, lang)"
+                    (click)="toggleOutputMenu($event, v, lang)"
+                    title="Choose Preview or Download">
+                    <span *ngIf="vm.isDownloadBusy(v._sid, v.deck_version, lang)" class="spinner-sm"></span>
+                    {{ lang }}
+                    <svg class="lang-menu-caret" viewBox="0 0 24 24" width="11" height="11" fill="none"
+                      stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
+                      aria-hidden="true">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </ng-container>
+            <ng-template #noOutputs>
+              <div class="empty-state small studio-empty-state">Nothing generated yet.</div>
+            </ng-template>
+          </ng-container>
+        </div>
+      </section>
+
+      <!-- Floating Help '?' Button (Matching Mockup) -->
+      <!-- <div class="studio-help-host">
+        <button type="button"
+                class="floating-help-btn"
+                title="Help & Info"
+                aria-label="Help & Info">?</button>
+      </div> -->
+    </aside>
+    </ng-container>
+  </div>
+</section>
+
+<!-- ===================== Deck slide preview modal ===================== -->
+<div class="modal-overlay preview-overlay" *ngIf="previewOpen" (click)="closeDeckPreview()">
+  <div class="modal-card preview-modal" (click)="$event.stopPropagation()" role="dialog" aria-modal="true"
+    aria-label="Deck preview">
+    <div class="preview-head">
+      <div class="preview-head-main">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+        <span class="preview-title" [title]="previewTitle">{{ previewTitle }}</span>
+        <span class="preview-counter" *ngIf="previewSlideCount > 0">Slide {{ previewCurrent }} / {{ previewSlideCount }}</span>
+      </div>
+      <div class="preview-head-actions">
+        <div class="preview-lang-pills" *ngIf="previewLanguages.length > 1">
+          <button type="button" *ngFor="let lang of previewLanguages; trackBy: trackByString"
+            class="preview-lang-pill" [class.active]="lang === previewLanguage" [disabled]="previewLoading"
+            (click)="switchPreviewLanguage(lang)">{{ lang }}</button>
+        </div>
+        <!-- <button type="button" class="btn btn-small btn-secondary" (click)="downloadPreview()"
+          title="Download the .pptx file">Download</button> -->
+        <button type="button" class="preview-close-btn" (click)="closeDeckPreview()" title="Close preview"
+          aria-label="Close preview">×</button>
+      </div>
+    </div>
+
+    <div class="preview-note" role="note">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+      <span>This is a quick preview and may not reflect the exact formatting. Download the file and
+        open it in PowerPoint to see it perfectly.</span>
+    </div>
+
+    <div class="preview-body">
+      <div class="preview-stage" #previewStageEl (scroll)="onPreviewScroll()">
+        <div class="pptx-host" #pptxWrapperEl></div>
+      </div>
+
+      <div class="preview-state-overlay" *ngIf="previewLoading">
+        <span class="spinner-sm"></span>
+        <span>Rendering slides…</span>
+      </div>
+      <div class="preview-state-overlay preview-state-error" *ngIf="previewError && !previewLoading">
+        <span>{{ previewError }}</span>
+        <button type="button" class="btn btn-small btn-secondary" (click)="downloadPreview()">Download instead</button>
+      </div>
+    </div>
+
+    <div class="preview-foot" *ngIf="previewSlideCount > 1">
+      <button type="button" class="btn btn-small btn-ghost" [disabled]="previewCurrent <= 1"
+        (click)="previewNav(-1)">‹ Prev</button>
+      <span class="preview-foot-count">{{ previewCurrent }} / {{ previewSlideCount }}</span>
+      <button type="button" class="btn btn-small btn-ghost" [disabled]="previewCurrent >= previewSlideCount"
+        (click)="previewNav(1)">Next ›</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== Outputs action menu (Preview / Download) ===================== -->
+<div class="output-menu-backdrop" *ngIf="outputMenuKey" (click)="closeOutputMenu()"></div>
+<div class="output-menu" *ngIf="outputMenuKey && outputMenuCtx" role="menu"
+  [style.left.px]="outputMenuX" [style.top.px]="outputMenuY">
+  <div class="output-menu-lang">{{ outputMenuCtx.lang }}</div>
+  <button type="button" class="output-menu-item" role="menuitem" (click)="outputMenuPreview()">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
+      <circle cx="12" cy="12" r="3"></circle>
+    </svg>
+    Preview
+  </button>
+  <button type="button" class="output-menu-item" role="menuitem"
+    [disabled]="vm.isDownloadBusy(outputMenuCtx.sid, outputMenuCtx.version, outputMenuCtx.lang)"
+    (click)="outputMenuDownload()">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+      <polyline points="7 10 12 15 17 10"></polyline>
+      <line x1="12" y1="15" x2="12" y2="3"></line>
+    </svg>
+    Download
+  </button>
+</div>
+
+<!-- ===================== Deck feedback popover (anchored to a chat thumb) ===================== -->
+<ng-container *ngIf="feedbackPopover && popoverFeedback as fb">
+  <div class="output-menu-backdrop" (click)="cancelFeedback()"></div>
+  <div class="feedback-popover" role="dialog" aria-label="Submit feedback"
+    [style.left.px]="feedbackPopover.left" [style.top.px]="feedbackPopover.top"
+    [style.bottom.px]="feedbackPopover.bottom" (keydown.escape)="cancelFeedback()">
+    <div class="feedback-popover-title">
+      <span class="feedback-popover-icon" [class.is-up]="fb.thumbsUp" [class.is-down]="!fb.thumbsUp">
+        <ng-container *ngTemplateOutlet="fb.thumbsUp ? thumbUpIcon : thumbDownIcon"></ng-container>
+      </span>
+      Submit feedback for v{{ feedbackPopover.version }}
+    </div>
+    <textarea #feedbackCommentEl class="feedback-comment" rows="3" [maxlength]="feedbackMax" [(ngModel)]="fb.comment"
+      [disabled]="fb.status === 'submitting'"
+      [placeholder]="fb.thumbsUp ? 'What did you like? (optional)' : 'What could be improved? (optional)'"
+      aria-label="Feedback comment"></textarea>
+    <div class="feedback-form-foot">
+      <span class="feedback-counter">{{ fb.comment.length }} / {{ feedbackMax }}</span>
+    </div>
+    <div *ngIf="fb.error" class="feedback-error" role="alert">{{ fb.error }}</div>
+    <div class="feedback-popover-actions">
+      <button type="button" class="btn btn-primary btn-small" [class.is-loading]="fb.status === 'submitting'"
+        [disabled]="fb.status === 'submitting'" (click)="submitFeedback()">
+        <span *ngIf="fb.status === 'submitting'" class="spinner-sm"></span>Submit
+      </button>
+      <button type="button" class="btn btn-secondary btn-small" [disabled]="fb.status === 'submitting'"
+        (click)="cancelFeedback()">Cancel</button>
+    </div>
+  </div>
+</ng-container>
+
+<ng-template #thumbUpIcon>
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M7 10v12"></path>
+    <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"></path>
+  </svg>
+</ng-template>
+<ng-template #thumbDownIcon>
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M17 14V2"></path>
+    <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"></path>
+  </svg>
+</ng-template>
+<ng-template #copiedIcon>
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <polyline points="20 6 9 17 4 12"></polyline>
+  </svg>
+</ng-template>
+
+<!-- ===================== Thought group template ===================== -->
+<ng-template #thoughtGroupTpl let-turn="turn" let-live="live">
+  <div class="chat-row chat-row-assistant thought-chat-row">
+    <div class="chat-avatar chat-avatar-assistant" title="AI Assistant" aria-label="Assistant">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="14" rx="2" ry="2"></rect>
+        <line x1="8" y1="21" x2="16" y2="21"></line>
+        <line x1="12" y1="17" x2="12" y2="21"></line>
+        <circle cx="8.5" cy="8.5" r="1" fill="currentColor"></circle>
+        <circle cx="15.5" cy="8.5" r="1" fill="currentColor"></circle>
+      </svg>
+    </div>
+    <div class="thought-turn-content">
+    <!-- Re-attached after a reload and still catching up: show "Resuming" instead of an empty "Thinking" -->
+    <div class="resume-card" *ngIf="showResumeCard(turn, live)" role="status" aria-live="polite">
+      <div class="resume-card-head">
+        <span class="resume-orb" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"></path>
+            <path d="M21 3v5h-5"></path></svg>
+        </span>
+        <span class="resume-copy">
+          <span class="resume-title">Resuming your deck build<span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>
+          <span class="resume-sub">Reconnecting and catching up on the progress made while you were away.</span>
+        </span>
+      </div>
+      <div class="resume-skeleton" aria-hidden="true">
+        <span class="resume-bar"></span>
+        <span class="resume-chips"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+    </div>
+    <!-- Chat / clarify turns: a lightweight thinking bubble instead of the full activity log -->
+    <div class="thinking-bubble" *ngIf="isCompactTurn(turn, live) && turn.flow.mode !== 'planning'" role="status" aria-live="polite">
+      <span class="thinking-orb" aria-hidden="true"></span>
+      <span class="thinking-text">{{ turn.flow.thinkingNote || 'Thinking' }}</span>
+      <span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+    <!-- Planning turns: friendly "curating your plan" card; raw log stays one click away -->
+    <div class="plan-curate" *ngIf="isCompactTurn(turn, live) && turn.flow.mode === 'planning'" role="status" aria-live="polite">
+      <div class="plan-curate-head">
+        <span class="plan-curate-art" aria-hidden="true">
+          <span class="plan-curate-line"></span><span class="plan-curate-line"></span><span class="plan-curate-line"></span>
+          <span class="plan-curate-pen">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+          </span>
+        </span>
+        <span class="plan-curate-copy">
+          <span class="plan-curate-title">Curating your plan<span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>
+          <span class="plan-curate-sub">Reading your sources and shaping a slide outline for you to review.</span>
+        </span>
+      </div>
+      <ol class="plan-steps" *ngIf="turn.flow.activity.length">
+        <li *ngFor="let step of turn.flow.activity; let last = last; trackBy: trackByIndex" class="plan-step"
+          [class.is-current]="last">
+          <span class="plan-step-mark" aria-hidden="true">{{ last ? '' : '✓' }}</span>
+          <span class="plan-step-text">{{ step }}</span>
+        </li>
+      </ol>
+      <details class="plan-tech">
+        <summary>Technical details</summary>
+        <div class="thought-log-list">
+          <div *ngFor="let evt of turn.events; trackBy: trackByIndex" class="thought-row">
+            <span class="thought-icon" [ngClass]="thoughtIconClass(evt)">{{ thoughtIcon(evt) }}</span>
+            <span class="thought-agent">[{{ evt.agent || '' }}]</span>
+            <span class="thought-msg" [ngClass]="thoughtMsgClass(evt)">{{ evt.message || '' }}</span>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="thought-group" *ngIf="!isCompactTurn(turn, live) && !showResumeCard(turn, live)" [class.collapsed]="turn.collapsed">
+    <button type="button" class="thought-group-header" (click)="turn.collapsed = !turn.collapsed"
+      [attr.aria-expanded]="!turn.collapsed">
+      <span class="thought-group-title" [class.is-running]="live && !turn.flow?.done && !turn.flow?.error">
+        <span class="thought-title-loader" *ngIf="live && !turn.flow?.done && !turn.flow?.error" aria-hidden="true"></span>
+        <span class="thought-title-text">{{ turn.title || 'Thought process' }}</span>
+      </span>
+      <span class="thought-header-meta">
+        <span class="thought-stage-status" *ngIf="turn.flow?.started || turn.flow?.cancelled"
+          [class.is-running]="live && !turn.flow.done && !turn.flow.error"
+          [class.is-done]="turn.flow.done && !turn.flow.error && !turn.flow.cancelled" [class.has-error]="turn.flow.error"
+          [title]="flowSummary(turn.flow)" aria-live="polite" aria-atomic="true">
+          <span class="thought-stage-check" *ngIf="turn.flow.done && !turn.flow.error && !turn.flow.cancelled" aria-hidden="true">&#10003;</span>
+          <span class="thought-stage-copy">{{ turn.flow.cancelled ? 'Deck creation was stopped' : turn.flow.error ? 'Deck creation needs attention' : turn.flow.done ? 'Deck ready to preview' : !live ? 'Deck creation is paused' : turn.resuming ? 'Reconnecting to live progress' : flowStageStatus(turn.flow) }}</span>
+          <span class="thought-stage-ellipsis" *ngIf="live && !turn.flow.done && !turn.flow.error" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
+        </span>
+        <span class="flow-board-duration thought-duration" role="timer"
+          *ngIf="turn.durationMs != null || (live && turn.flow?.started && !turn.flow.done && !turn.flow.error)"
+          [class.is-running]="turn.durationMs == null" [class.has-error]="turn.flow?.error"
+          [attr.aria-label]="turn.durationMs == null ? 'Measuring deck creation time' : 'Elapsed time: ' + formatDuration(turn.durationMs)"
+          [title]="turn.durationMs == null ? 'Measuring deck creation time' : 'Time taken to build this deck'">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="13" r="8"></circle>
+            <path class="thought-clock-hand" d="M12 13V9"></path>
+            <path d="m12 13 2 2"></path><path d="M9 2h6"></path>
+          </svg>
+          <span *ngIf="turn.durationMs != null">{{ formatDuration(turn.durationMs) }}</span>
+        </span>
+      </span>
+      <svg class="thought-chevron" [class.is-collapsed]="turn.collapsed" viewBox="0 0 24 24" width="12" height="12"
+        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </button>
+    <div class="thought-group-body">
+      <div class="thought-log-list" [attr.data-live]="live ? '1' : null" #logListEl>
+        <div *ngFor="let evt of turn.events; trackBy: trackByIndex" class="thought-row">
+          <span class="thought-icon" [ngClass]="thoughtIconClass(evt)">{{ thoughtIcon(evt) }}</span>
+          <span class="thought-agent">[{{ evt.agent || '' }}]</span>
+          <span class="thought-msg" [ngClass]="thoughtMsgClass(evt)">{{ evt.message || '' }}</span>
+        </div>
+      </div>
+      <div class="flow-board" *ngIf="turn.flow?.started" [class.is-finished]="!live || turn.flow.done">
+        <div class="flow-board-head">
+          <span class="flow-board-title">Progress</span>
+          <span class="flow-board-pct" *ngIf="!turn.flow.cancelled">{{ flowPercent(turn.flow) }}%</span>
+        </div>
+        <div class="flow-meter" *ngIf="!turn.flow.cancelled" role="progressbar" aria-label="Deck build progress"
+          [attr.aria-valuenow]="flowPercent(turn.flow)" aria-valuemin="0" aria-valuemax="100"
+          [ngClass]="'phase-' + (FLOW_STAGES[turn.flow.stageIdx]?.key || 'write')"
+          [class.is-complete]="turn.flow.done && !turn.flow.error"
+          [class.is-running]="live && !turn.flow.done && !turn.flow.error" [class.has-error]="turn.flow.error">
+          <span class="flow-meter-fill" [style.width.%]="flowPercent(turn.flow)"></span>
+          <i *ngFor="let at of flowMeterTicks(turn.flow); trackBy: trackByIndex" class="flow-meter-tick" [style.left.%]="at"
+            aria-hidden="true"></i>
+        </div>
+        <div class="flow-now" *ngIf="live && !turn.flow.done && turn.flow.now" aria-live="polite"
+          [ngClass]="'stage-' + (turn.flow.nowStage || 'design')">
+          <span class="flow-now-label">Now</span><span class="flow-now-text">{{ turn.flow.now }}</span>
+        </div>
+        <div class="flow-stepper" [class.is-running]="live && !turn.flow.done && !turn.flow.error">
+          <div *ngFor="let st of FLOW_STAGES; let i = index; trackBy: trackByIndex" class="flow-step"
+            [ngClass]="stepState(turn.flow, i)" [attr.data-step]="st.key">
+            <span class="flow-step-dot">{{ stepDot(turn.flow, i) }}</span>
+            <span class="flow-step-label">{{ st.label }}</span>
+          </div>
+        </div>
+        <div class="flow-section" *ngIf="turn.flow.slides.size">
+          <div class="flow-section-label">{{ slidesProgressLabel(turn.flow) }}</div>
+          <div class="slide-strip">
+            <div *ngFor="let s of slidesArr(turn.flow); trackBy: trackSlideByIndex" class="slide-chip"
+              [ngClass]="'stage-' + s.stage" [class.is-fallback]="s.fallback" [attr.data-index]="s.index"
+              [title]="slideChipTitle(s)" [attr.aria-label]="slideChipTitle(s)">{{ s.index }}</div>
+          </div>
+          <div class="slide-legend">
+            <span class="slide-legend-item" title="Slide content is being written"><i class="slide-legend-dot stage-progress"></i>writing</span>
+            <span class="slide-legend-item" title="Searching the sources for this slide"><i class="slide-legend-dot stage-research"></i>research</span>
+            <span class="slide-legend-item" title="Content is ready and waiting to be designed"><i class="slide-legend-dot stage-written"></i>written</span>
+            <span class="slide-legend-item" title="The PowerPoint slide is being coded and rendered"><i class="slide-legend-dot stage-design"></i>designing</span>
+            <span class="slide-legend-item" title="A visual or layout check failed; the slide is being redesigned"><i class="slide-legend-dot stage-retry"></i>retrying</span>
+            <span class="slide-legend-item" title="Slide is designed and rendered"><i class="slide-legend-dot stage-done"></i>done</span>
+            <span class="slide-legend-item" title="Slide could not be built"><i class="slide-legend-dot stage-failed"></i>failed</span>
+          </div>
+        </div>
+        <div class="flow-section" *ngIf="showLangSection(turn.flow)">
+          <div class="flow-section-label">
+            Languages {{ turn.flow.langs.size }}{{ turn.flow.langTotal ? '/' + turn.flow.langTotal : '' }}
+          </div>
+          <div class="lang-strip">
+            <div *ngFor="let name of langsArr(turn.flow); trackBy: trackByString" class="lang-chip stage-done"
+              [title]="name + ' deck · built'">{{ langCode(name) }}</div>
+            <div *ngIf="showLangBuilding(turn.flow)" class="lang-chip building" title="Building the next language…">…
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+    <button type="button" class="output-card thought-preview-card" *ngIf="previewDetailsForTurn(turn) as preview"
+      (click)="previewDeckFromTurn(turn)" [attr.aria-label]="'Preview slides: ' + preview.title"
+      title="Preview the slides without downloading">
+      <span class="thought-preview-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+        </svg>
+      </span>
+      <span class="thought-preview-copy">
+        <span class="output-title">{{ preview.title }}</span>
+        <span class="output-meta">v{{ preview.version }}<ng-container *ngIf="turn.flow.slideTotal || turn.flow.slides.size"> &middot; {{ turn.flow.slideTotal || turn.flow.slides.size }} {{ (turn.flow.slideTotal || turn.flow.slides.size) === 1 ? 'slide' : 'slides' }}</ng-container><ng-container *ngIf="preview.languages.length"> &middot; {{ preview.languages.join(', ') }}</ng-container></span>
+      </span>
+      <span class="thought-preview-action">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        Preview slides
+      </span>
+    </button>
+    </div>
+  </div>
+</ng-template>

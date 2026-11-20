@@ -1,0 +1,50 @@
+<form class="qform" (ngSubmit)="submitted.emit()" [attr.aria-busy]="form.submitting ? 'true' : 'false'"
+  aria-label="Questions from the assistant">
+  <div class="qform-item" *ngFor="let q of form.questions; trackBy: trackById">
+    <label class="qform-q" [attr.for]="inputId(q)">
+      {{ q.text }}
+      <span class="qform-optional" *ngIf="!q.required">(optional)</span>
+    </label>
+
+    <ng-container [ngSwitch]="q.type">
+      <!-- Ordered slider (LOW → MED → HIGH, or slide-count ranges), keyed on the stable question id / option value -->
+      <div *ngSwitchCase="'scale'" class="qform-scale">
+        <input type="range" class="qform-range" [id]="inputId(q)" min="0" [max]="q.options.length - 1" step="1"
+          [value]="scaleIndex(q)" (input)="onScaleInput(q, $event)" [disabled]="form.submitting"
+          [attr.aria-valuetext]="scaleOption(q)?.label">
+        <div class="qform-stops" role="group" [attr.aria-label]="q.text">
+          <button type="button" class="qform-stop" *ngFor="let o of q.options; trackBy: trackByValue"
+            [class.is-active]="form.choices[q.id] === o.value" [attr.aria-pressed]="form.choices[q.id] === o.value"
+            [disabled]="form.submitting" (click)="pick(q, o.value)">{{ o.label || o.value }}</button>
+        </div>
+        <p class="qform-help" *ngIf="scaleOption(q)?.description">{{ scaleOption(q)?.description }}</p>
+      </div>
+
+      <div *ngSwitchCase="'single_choice'" class="qform-choice">
+        <div class="qform-chips" role="group" [attr.aria-label]="q.text">
+          <button type="button" class="qform-chip" *ngFor="let o of q.options; trackBy: trackByValue"
+            [class.is-active]="isPicked(q, o)" [attr.aria-pressed]="isPicked(q, o)" [title]="o.description || o.label"
+            [disabled]="form.submitting" (click)="toggleChip(q, o)">{{ o.label }}</button>
+        </div>
+        <input *ngIf="q.allow_free_text" type="text" class="qform-input" [id]="inputId(q)" autocomplete="off"
+          [maxlength]="maxChars" placeholder="Or type your own answer" [value]="form.text[q.id] || ''"
+          [disabled]="form.submitting" (input)="onText(q, $event)">
+      </div>
+
+      <input *ngSwitchDefault type="text" class="qform-input" [id]="inputId(q)" autocomplete="off"
+        [maxlength]="maxChars" placeholder="Type your answer" [value]="form.text[q.id] || ''"
+        [disabled]="form.submitting" (input)="onText(q, $event)">
+    </ng-container>
+  </div>
+
+  <div class="qform-error" role="alert" *ngIf="form.error">{{ form.error }}</div>
+
+  <div class="qform-actions">
+    <span class="qform-hint">{{ live ? 'Waiting for the assistant to finish…' : 'You can also answer in the chat.' }}</span>
+    <button type="submit" class="btn btn-primary btn-small qform-submit" [disabled]="submitDisabled"
+      [class.is-loading]="form.submitting">
+      <span class="spinner-sm" *ngIf="form.submitting"></span>
+      {{ form.submitting ? 'Submitting…' : 'Submit answers' }}
+    </button>
+  </div>
+</form>

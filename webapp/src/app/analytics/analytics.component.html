@@ -1,0 +1,460 @@
+<section id="tab-analytics" #scroller class="tab-panel active" *ngIf="isAdmin" aria-labelledby="analytics-title">
+  <nav class="subnav" *ngIf="view" aria-label="Page sections">
+    <span class="subnav-label">Jump to</span>
+    <button *ngFor="let tier of tiers; let index = index" type="button" class="chip" [attr.aria-current]="activeTier === tier.id ? 'true' : null"
+            (click)="scrollToTier(tier.id)"><span class="chip-n" aria-hidden="true">{{ index + 1 }}</span>{{ tier.label }}</button>
+  </nav>
+  <div class="analytics-page">
+    <header class="page-head">
+      <div><span class="eyebrow">Success enablement</span><h1 id="analytics-title">Analytics</h1>
+        <p class="muted page-sub">Organization activity <span class="sep" aria-hidden="true">/</span> {{ windowLabel }}</p>
+      </div>
+      <div class="page-head-actions">
+        <button *ngIf="dashboard && dataQualityTotal" type="button" class="dq-dot" (click)="openDataQuality()"
+                [attr.aria-label]="'Data quality: ' + format(dataQualityTotal) + ' notes. Jump to details.'">
+          <i aria-hidden="true"></i><span>{{ format(dataQualityTotal) }} data {{ dataQualityTotal === 1 ? 'note' : 'notes' }}</span>
+        </button>
+        <button type="button" class="btn btn-secondary icon-button" title="Refresh analytics" aria-label="Refresh analytics"
+                [disabled]="loading" (click)="applyWindow()"><lucide-icon name="refresh-cw" [size]="17"></lucide-icon></button>
+      </div>
+    </header>
+
+    <div class="filterbar">
+      <div class="filter-summary">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>
+        <span class="summary-pill" aria-live="polite">{{ filterSummary }}</span>
+      </div>
+      <button type="button" class="text-btn" [attr.aria-expanded]="filtersOpen" aria-controls="analytics-filters" (click)="filtersOpen = !filtersOpen">
+        Edit filters <lucide-icon name="chevron-down" [size]="14" class="chev"></lucide-icon>
+      </button>
+    </div>
+    <form id="analytics-filters" class="filters" [hidden]="!filtersOpen" (ngSubmit)="submitFilters()" aria-label="Analytics date range">
+      <label class="field">Date range
+        <select name="range" [ngModel]="rangePreset" (ngModelChange)="setPreset($event)">
+          <option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="custom">Custom range</option>
+        </select>
+      </label>
+      <label class="field">From (UTC)<input type="date" name="from" [(ngModel)]="fromDate" (ngModelChange)="rangePreset = 'custom'" required></label>
+      <label class="field">Through (UTC)<input type="date" name="to" [(ngModel)]="toDate" (ngModelChange)="rangePreset = 'custom'" required></label>
+      <label class="field">Display timezone
+        <select name="timezone" [(ngModel)]="timezone"><option *ngFor="let zone of timezones" [value]="zone">{{ zone }}</option></select>
+      </label>
+      <button class="btn btn-primary apply-button" type="submit">Apply</button>
+    </form>
+    <p *ngIf="validationError" class="error-text" role="alert">{{ validationError }}</p>
+
+    <div *ngIf="loading && !dashboard" class="dashboard-loading" role="status" aria-live="polite">
+      <div class="loading-heading"><span class="spinner-sm"></span> Loading analytics...</div>
+      <div class="hero-grid" aria-hidden="true"><div class="skeleton" *ngFor="let item of [1,2,3,4,5]"></div></div>
+      <div class="skeleton skeleton-chart" aria-hidden="true"></div>
+    </div>
+    <div *ngIf="error && !loading && !dashboard" class="request-error" role="alert">
+      <lucide-icon name="alert-triangle" [size]="20"></lucide-icon>
+      <div><strong>Analytics unavailable</strong><p>{{ error }}</p></div>
+      <button class="btn btn-secondary" type="button" (click)="loadDashboard()">Retry</button>
+    </div>
+
+    <ng-container *ngIf="dashboard as data"><ng-container *ngIf="view as v">
+      <!-- ============ Tier 1 · At a glance ============ -->
+      <section class="tier tier-first" id="analytics-glance" data-tier aria-labelledby="glance-title">
+        <div class="tier-head">
+          <div><h2 class="tier-title" id="glance-title"><span class="chip-n" aria-hidden="true">1</span>At a glance</h2>
+            <p class="tier-desc">What the team got done with SE Agents in this period.</p></div>
+          <span class="audience">For everyone</span>
+        </div>
+        <div class="hero-grid" role="group" aria-label="Headline results">
+          <article class="card hero" data-accent="red">
+            <div class="hero-top"><span>Slides delivered</span></div>
+            <div class="hero-main">
+              <div class="hero-text"><div class="hero-value">{{ v.slides.value }}</div><p class="hero-caption">Finished slides the team shipped in this period</p></div>
+              <svg class="spark" viewBox="0 0 132 40" role="img" [attr.aria-label]="v.slides.sparkLabel">
+                <rect *ngFor="let bar of v.slides.spark" [attr.class]="'spark-' + bar.kind" [attr.x]="bar.x" [attr.y]="bar.y" [attr.width]="bar.width" [attr.height]="bar.height" rx="1"></rect>
+              </svg>
+            </div>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.slides.details, note: 'Created + updated slides in successful runs.' }"></ng-container>
+          </article>
+          <article class="card hero" data-accent="teal">
+            <div class="hero-top"><span>Projects published</span><span class="metric-badge" data-type="derived">derived</span></div>
+            <div class="hero-main">
+              <div class="hero-text">
+                <div class="hero-value">{{ v.published.value }}<small>{{ v.published.of }}</small></div>
+                <p class="hero-caption">Projects that made it all the way to a published deck</p>
+                <div class="hero-legend"><span><i class="legend-fill"></i>Published {{ v.published.published }}</span><span><i></i>Not yet {{ v.published.notPublished }}</span></div>
+              </div>
+              <ng-container *ngTemplateOutlet="ring; context: { rate: v.published.rate, text: v.published.rateText, label: v.published.rateText + ' of projects published' }"></ng-container>
+            </div>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.published.details, note: 'Publish rate = successful projects ÷ projects worked on, computed on the page.' }"></ng-container>
+          </article>
+          <article class="card hero" data-accent="blue">
+            <div class="hero-top"><span>People actively creating</span></div>
+            <div class="hero-main">
+              <div class="hero-text"><div class="hero-value">{{ v.people.value }}</div><p class="hero-caption">{{ v.people.caption }}</p></div>
+              <div *ngIf="v.people.owners.length" class="avatars" role="img" [attr.aria-label]="ownerNames(v.people.owners)">
+                <span *ngFor="let owner of v.people.owners" class="avatar" [title]="owner.name">{{ owner.initials }}</span>
+              </div>
+            </div>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.people.details, note: 'Users with workflow activity in the window. Names come from the loaded project sessions.' }"></ng-container>
+          </article>
+          <article class="card hero" data-accent="gold">
+            <div class="hero-top"><span>Hours saved</span><span class="metric-badge plain" data-type="estimated">Estimated · {{ v.hours.confidence }} confidence</span></div>
+            <div class="hero-main">
+              <div class="hero-text"><div class="hero-value">{{ v.hours.value }}<small>hours</small></div><p class="hero-caption">{{ v.hours.caption }}</p></div>
+              <div class="mini-cmp" role="img" [attr.aria-label]="v.hours.agentShareText">
+                <div class="mini-cmp-row"><span>By hand</span><div class="mini-cmp-track"><div class="mini-cmp-fill" style="width: 100%"></div></div></div>
+                <div class="mini-cmp-row"><span>With agents</span><div class="mini-cmp-track"><div class="mini-cmp-fill accent" [style.width.%]="v.hours.agentShare"></div></div></div>
+              </div>
+            </div>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.hours.details, note: v.hours.note }"></ng-container>
+          </article>
+          <article class="card hero" data-accent="green">
+            <div class="hero-top"><span>Reliability</span><span class="metric-badge" data-type="derived">derived</span></div>
+            <div class="hero-main">
+              <div class="hero-text"><div class="hero-value">{{ v.reliability.value }}</div><p class="hero-caption">{{ v.reliability.caption }}</p></div>
+              <ng-container *ngTemplateOutlet="ring; context: { rate: v.reliability.rate, text: v.reliability.value, label: 'Reliability ' + v.reliability.value }"></ng-container>
+            </div>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.reliability.details, note: 'Reliability = 1 − agent failure rate, computed on the page.' }"></ng-container>
+          </article>
+        </div>
+
+        <div class="grid-main">
+          <section class="card" aria-labelledby="chart-title">
+            <div class="card-head">
+              <div><span class="eyebrow">Activity</span><h3 class="card-title" id="chart-title">{{ data.trends.bucket === 'week' ? 'Week by week' : 'Day by day' }}</h3>
+                <p class="card-sub">{{ trendSelection.label }} per {{ data.trends.bucket }} · UTC <span class="metric-badge" data-type="measured">measured</span></p></div>
+              <label class="field chart-select"><span class="sr-only">Chart metric</span>
+                <select name="trend" [(ngModel)]="trendMetric" (ngModelChange)="updateTrend()"><option *ngFor="let option of trendOptions" [value]="option.value">{{ option.label }}</option></select>
+              </label>
+            </div>
+            <div class="chart-summary"><span class="chart-summary-val">{{ trendSummary.value }}</span><span>{{ trendSummary.caption }}</span></div>
+            <div class="trend-chart" *ngIf="hasTrendData; else noTrend">
+              <app-analytics-chart [labels]="trendLabels" [series]="trendSeries" [format]="trendSelection.format" [label]="trendSelection.label + ' over the selected window'"></app-analytics-chart>
+            </div>
+            <ng-template #noTrend><div class="empty-state chart-empty"><lucide-icon name="activity" [size]="28"></lucide-icon><strong>No trend data</strong><span>No observations for this metric in the selected window.</span></div></ng-template>
+          </section>
+          <section class="card card-flex" aria-labelledby="cost-title">
+            <div class="card-head"><div><span class="eyebrow">Cost</span><h3 class="card-title" id="cost-title">What it costs</h3><p class="card-sub">AI spend for this period, priced per slide</p></div></div>
+            <div class="price"><span class="price-big">{{ v.cost.perSlide }}</span><span class="price-unit">per slide</span></div>
+            <div class="price-sec">≈ {{ v.cost.perProject }} per project</div>
+            <div class="price-total">{{ v.cost.total }} total for this period · {{ v.cost.calls }} AI calls</div>
+            <div class="price-frame"><b>≈ {{ v.cost.perHour }}</b><span>per hour of work saved</span><span class="metric-badge" data-type="estimated">estimated</span></div>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.cost.details, note: v.cost.note }"></ng-container>
+          </section>
+        </div>
+      </section>
+
+      <!-- ============ Tier 2 · Operations ============ -->
+      <section class="tier" id="analytics-operations" data-tier aria-labelledby="operations-title">
+        <div class="tier-head">
+          <div><h2 class="tier-title" id="operations-title"><span class="chip-n" aria-hidden="true">2</span>Operations</h2>
+            <p class="tier-desc">How the agents are performing: adoption, speed, quality and where the spend goes.</p></div>
+          <span class="audience">For technical managers</span>
+        </div>
+        <div class="grid-2">
+          <section class="card card-flex" aria-labelledby="adoption-title">
+            <div class="card-head"><div><span class="eyebrow">Adoption</span><h3 class="card-title" id="adoption-title">How teams work with agents</h3><p class="card-sub">Turns per project and how often people iterate</p></div></div>
+            <ng-container *ngTemplateOutlet="statGrid; context: { $implicit: v.adoption.stats }"></ng-container>
+            <div class="subhead">Iteration</div>
+            <ng-container *ngTemplateOutlet="hbars; context: { $implicit: v.adoption.multiTurn }"></ng-container>
+            <ng-container *ngIf="v.adoption.turns.length">
+              <div class="subhead">{{ v.adoption.turnsLabel }}</div>
+              <ng-container *ngTemplateOutlet="hbars; context: { $implicit: v.adoption.turns }"></ng-container>
+            </ng-container>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.adoption.details, note: v.adoption.note }"></ng-container>
+          </section>
+          <section class="card card-flex" aria-labelledby="performance-title">
+            <div class="card-head"><div><span class="eyebrow">Performance</span><h3 class="card-title" id="performance-title">Wait time per turn</h3><p class="card-sub">How long people wait for the agents, and how much agent work runs in parallel</p></div></div>
+            <ng-container *ngTemplateOutlet="statGrid; context: { $implicit: v.performance.stats }"></ng-container>
+            <div class="subhead">Per-turn wait</div>
+            <ng-container *ngTemplateOutlet="hbars; context: { $implicit: v.performance.wait }"></ng-container>
+            <div class="subhead">Wall-clock vs. agent-active</div>
+            <ng-container *ngTemplateOutlet="hbars; context: { $implicit: v.performance.active }"></ng-container>
+            <p *ngIf="v.performance.parallelNote" class="hbar-note">{{ v.performance.parallelNote }}</p>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.performance.details, note: v.performance.note }"></ng-container>
+          </section>
+        </div>
+        <div class="grid-2">
+          <section class="card card-flex" aria-labelledby="quality-title">
+            <div class="card-head"><div><span class="eyebrow">Quality</span><h3 class="card-title" id="quality-title">Reliability &amp; rework</h3><p class="card-sub">Agent-run outcomes and post-publish rework</p></div></div>
+            <ng-container *ngTemplateOutlet="statGrid; context: { $implicit: v.quality.stats }"></ng-container>
+            <div class="subhead">Feedback</div>
+            <div *ngIf="v.quality.noRatings; else feedbackStats" class="empty-note">
+              <ng-container *ngTemplateOutlet="infoIcon"></ng-container>
+              <span><b>No ratings yet.</b> Thumbs-up rate and comment coverage will populate once users rate a published version.</span>
+            </div>
+            <ng-template #feedbackStats><ng-container *ngTemplateOutlet="statGrid; context: { $implicit: v.quality.feedback }"></ng-container></ng-template>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.quality.details }"></ng-container>
+          </section>
+          <section class="card card-flex" aria-labelledby="tokens-title">
+            <div class="card-head"><div><span class="eyebrow">Cost &amp; tokens</span><h3 class="card-title" id="tokens-title">Where the spend goes</h3><p class="card-sub">Token volume and unit economics for the window</p></div></div>
+            <ng-container *ngTemplateOutlet="statGrid; context: { $implicit: v.tokens.stats }"></ng-container>
+            <div class="subhead">Token split</div>
+            <div class="stacked" role="img" [attr.aria-label]="tokenSplitLabel(v.tokens.split)">
+              <ng-container *ngFor="let segment of v.tokens.split"><span *ngIf="segment.width > 0" [style.width.%]="segment.width" [style.background]="'var(' + segment.color + ')'" [title]="segment.label + ' ' + segment.value"></span></ng-container>
+            </div>
+            <div class="legend">
+              <span *ngFor="let segment of v.tokens.split"><i [style.background]="'var(' + segment.color + ')'"></i>{{ segment.label }} <b>{{ segment.value }}</b> ({{ segment.share }})</span>
+            </div>
+            <ng-container *ngTemplateOutlet="details; context: { rows: v.tokens.details }"></ng-container>
+          </section>
+        </div>
+      </section>
+
+      <!-- ============ Tier 3 · Technical details ============ -->
+      <section class="tier" id="analytics-technical" data-tier aria-labelledby="technical-title">
+        <div class="tier-head">
+          <div><h2 class="tier-title" id="technical-title"><span class="chip-n" aria-hidden="true">3</span>Technical details</h2>
+            <p class="tier-desc">Per-agent and per-model breakdowns, every project session, data-quality notes and raw API values. Collapsed until you need them.</p></div>
+          <span class="audience">For developers</span>
+        </div>
+        <div class="tech-list">
+          <details class="card tech" id="analytics-agents">
+            <summary>
+              <div><div class="tech-title">Agents <span class="tech-hint">· performance by agent × model</span></div>
+                <div class="tech-sub"><span>{{ format(data.agents.length) }} agent × model combinations · {{ format(agentRunTotal) }} runs</span>
+                  <span *ngIf="agentsBelowTarget.length" class="warn-text"><lucide-icon name="alert-triangle" [size]="13"></lucide-icon>{{ agentsBelowTarget.length }} below 100% success ({{ agentsBelowTarget.join(', ') }})</span></div></div>
+              <ng-container *ngTemplateOutlet="techToggle"></ng-container>
+            </summary>
+            <div class="tech-body">
+              <div *ngIf="agentRows.length; else noAgents" class="table-wrap" tabindex="0" role="region" aria-label="Agent and model performance">
+                <table class="data-table agents-table">
+                  <thead><tr><th *ngFor="let column of agentColumns" scope="col" [class.num]="column.num" [attr.aria-sort]="localSortState(agentsSort, column.key)">
+                    <button class="sort-button" type="button" (click)="sortAgents(column.key)">{{ column.label }}<lucide-icon *ngIf="agentsSort.key === column.key" [name]="agentsSort.dir === 'asc' ? 'arrow-up' : 'arrow-down'" [size]="12"></lucide-icon></button>
+                  </th></tr></thead>
+                  <tbody><tr *ngFor="let agent of agentRows">
+                    <th scope="row" class="cell-strong">{{ agentLabel(agent.agent_name) }}</th>
+                    <td><span class="code-pill">{{ agent.model || 'Unknown model' }}</span></td>
+                    <td class="num">{{ format(agent.runs) }}</td>
+                    <td class="num"><span *ngIf="agent.success_rate != null && agent.success_rate < 1; else successRate" class="warn-text" title="Below 100% success"><lucide-icon name="alert-triangle" [size]="13"></lucide-icon>{{ rate(agent.success_rate, agent.runs) }}</span>
+                      <ng-template #successRate>{{ rate(agent.success_rate, agent.runs) }}</ng-template></td>
+                    <td class="num">{{ rate(agent.fallback_rate, agent.runs) }}</td>
+                    <td class="num">{{ format(agent.median_duration_ms, 'duration') }}</td>
+                    <td class="num">{{ format(agent.p95_duration_ms, 'duration') }}</td>
+                    <td class="num">{{ format(agent.llm_calls) }}</td>
+                    <td class="num">{{ format(agent.input_tokens, 'compact') }} <span class="slash">/</span> {{ format(agent.output_tokens, 'compact') }}</td>
+                    <td class="num">{{ format(agent.cost_usd, 'currency') }}</td>
+                    <td class="num">{{ format(agent.runs === 0 ? null : agent.cost_per_run_usd, 'currency') }}</td>
+                  </tr></tbody>
+                </table>
+              </div>
+              <ng-template #noAgents><div class="empty-state"><strong>No agent runs</strong><span>No agent activity was recorded in this window.</span></div></ng-template>
+            </div>
+          </details>
+
+          <details class="card tech" id="analytics-models">
+            <summary>
+              <div><div class="tech-title">Models <span class="tech-hint">· cost and usage by model</span></div>
+                <div class="tech-sub"><span>{{ format(data.models.length) }} models · {{ format(modelsTotalCost, 'currency') }} captured cost</span>
+                  <span *ngIf="topModel as top">· {{ top.model.model || 'Unknown model' }} accounts for {{ format(top.share, 'number') }}% of spend</span></div></div>
+              <ng-container *ngTemplateOutlet="techToggle"></ng-container>
+            </summary>
+            <div class="tech-body">
+              <div *ngIf="modelRows.length; else noModels" class="table-wrap" tabindex="0" role="region" aria-label="Model performance">
+                <table class="data-table models-table">
+                  <thead><tr><th *ngFor="let column of modelColumns" scope="col" [class.num]="column.num" [attr.aria-sort]="localSortState(modelsSort, column.key)">
+                    <button class="sort-button" type="button" (click)="sortModels(column.key)">{{ column.label }}<lucide-icon *ngIf="modelsSort.key === column.key" [name]="modelsSort.dir === 'asc' ? 'arrow-up' : 'arrow-down'" [size]="12"></lucide-icon></button>
+                  </th></tr></thead>
+                  <tbody><tr *ngFor="let row of modelRows">
+                    <th scope="row"><i class="rank-dot" [style.background]="'var(' + row.color + ')'"></i><span class="code-pill">{{ row.model.model || 'Unknown model' }}</span></th>
+                    <td class="num">{{ format(row.model.runs) }}</td>
+                    <td class="num"><span [class.warn-text]="(row.model.failure_rate ?? 0) > 0">{{ rate(row.model.failure_rate, row.model.runs) }}</span></td>
+                    <td class="num">{{ format(row.model.median_duration_ms, 'duration') }}</td>
+                    <td class="num">{{ format(row.model.llm_calls) }}</td>
+                    <td class="num">{{ format(row.model.input_tokens, 'compact') }} <span class="slash">/</span> {{ format(row.model.output_tokens, 'compact') }}</td>
+                    <td class="num">{{ format(row.model.cost_usd, 'currency') }}</td>
+                    <td><div class="share" role="img" [attr.aria-label]="(row.model.model || 'Unknown model') + ' is ' + format(row.share, 'number') + '% of cost'">
+                      <div class="share-track"><div class="share-fill" [style.width.%]="row.share ?? 0" [style.background]="'var(' + row.color + ')'"></div></div>
+                      <span class="share-pct">{{ row.share == null ? 'No data' : format(row.share, 'number') + '%' }}</span></div></td>
+                  </tr></tbody>
+                </table>
+              </div>
+              <ng-template #noModels><div class="empty-state"><strong>No model activity</strong><span>No model activity was recorded in this window.</span></div></ng-template>
+            </div>
+          </details>
+
+          <details class="card tech" id="analytics-projects">
+            <summary>
+              <div><div class="tech-title">Projects <span class="tech-hint">· every session in the window</span></div>
+                <div class="tech-sub"><span>{{ format(projectTotal) }} sessions · {{ format(projectStats.published) }} published · {{ format(projectStats.owners) }} owners{{ projectTotal > projects.length ? ' on this page' : '' }}</span></div></div>
+              <ng-container *ngTemplateOutlet="techToggle"></ng-container>
+            </summary>
+            <div class="tech-body">
+              <div class="tbl-head">
+                <div class="search">
+                  <label class="sr-only" for="analytics-project-search">Search projects on this page by owner or session id</label>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+                  <input id="analytics-project-search" type="search" placeholder="Search owner or session…" autocomplete="off" [(ngModel)]="projectQuery" (ngModelChange)="filterProjects()">
+                </div>
+                <div class="export-actions">
+                  <span *ngIf="exporting" role="status" class="section-meta">{{ format(exportedRows) }} / {{ format(exportTotal) }}</span>
+                  <button class="btn btn-secondary" type="button" (click)="exportProjects()" [disabled]="exporting || projectsLoading || !projectTotal" title="Export all matching projects">
+                    <lucide-icon name="download" [size]="16"></lucide-icon>{{ exporting ? 'Exporting...' : 'Export CSV' }}
+                  </button>
+                  <button *ngIf="exporting" class="btn btn-ghost icon-button" type="button" (click)="cancelExport()" title="Cancel export" aria-label="Cancel export"><lucide-icon name="x" [size]="16"></lucide-icon></button>
+                </div>
+              </div>
+              <p class="section-meta table-note">Sort with the column headers (applies to all matching projects). Search filters the rows on this page.</p>
+              <p *ngIf="exportError" class="error-text" role="alert">{{ exportError }}</p>
+              <div *ngIf="projectsLoading" class="loading-heading" role="status"><span class="spinner-sm"></span> Loading projects...</div>
+              <div *ngIf="projectsError && !projectsLoading" class="request-error" role="alert"><div><strong>Projects unavailable</strong><p>{{ projectsError }}</p></div><button class="btn btn-secondary" type="button" (click)="loadProjects()">Retry projects</button></div>
+              <ng-container *ngIf="!projectsLoading && !projectsError">
+                <div *ngIf="projects.length; else noProjects" class="table-wrap" tabindex="0" role="region" aria-label="Project analytics">
+                  <table class="data-table project-table">
+                    <thead><tr>
+                      <th scope="col">Project / owner</th><th scope="col">Status</th>
+                      <th scope="col" class="num" [attr.aria-sort]="sortState('turns')"><button class="sort-button" type="button" (click)="sortProjects('turns')">Turns<lucide-icon *ngIf="projectSort === 'turns'" [name]="projectOrder === 'asc' ? 'arrow-up' : 'arrow-down'" [size]="12"></lucide-icon></button></th>
+                      <th scope="col">Multi-turn</th><th scope="col" class="num">Slides</th>
+                      <th scope="col" class="num" [attr.aria-sort]="sortState('duration')"><button class="sort-button" type="button" (click)="sortProjects('duration')">AI turnaround<lucide-icon *ngIf="projectSort === 'duration'" [name]="projectOrder === 'asc' ? 'arrow-up' : 'arrow-down'" [size]="12"></lucide-icon></button></th>
+                      <th scope="col" class="num">Agent processing</th>
+                      <th scope="col" class="num" [attr.aria-sort]="sortState('tokens')"><button class="sort-button" type="button" (click)="sortProjects('tokens')">Tokens<lucide-icon *ngIf="projectSort === 'tokens'" [name]="projectOrder === 'asc' ? 'arrow-up' : 'arrow-down'" [size]="12"></lucide-icon></button></th>
+                      <th scope="col" class="num" [attr.aria-sort]="sortState('cost')"><button class="sort-button" type="button" (click)="sortProjects('cost')">AI cost<lucide-icon *ngIf="projectSort === 'cost'" [name]="projectOrder === 'asc' ? 'arrow-up' : 'arrow-down'" [size]="12"></lucide-icon></button></th>
+                      <th scope="col" [attr.aria-sort]="sortState('last_active')"><button class="sort-button" type="button" (click)="sortProjects('last_active')">Last active<lucide-icon *ngIf="projectSort === 'last_active'" [name]="projectOrder === 'asc' ? 'arrow-up' : 'arrow-down'" [size]="12"></lucide-icon></button></th>
+                    </tr></thead>
+                    <tbody>
+                      <tr *ngIf="!projectRows.length"><td colspan="10" class="table-empty">No projects on this page match “{{ projectQuery }}”</td></tr>
+                      <tr *ngFor="let project of projectRows">
+                        <th scope="row" class="identity-cell"><button class="project-link" type="button" (click)="openProject(project.session_id)" [attr.aria-label]="'Open project ' + project.session_id">{{ project.session_id }}<lucide-icon name="chevron-right" [size]="14"></lucide-icon></button>
+                          <small>{{ project.owner_name || 'Unassigned' }}</small></th>
+                        <td><span class="status-pill" [ngClass]="project.published ? 'done' : 'neutral'">{{ project.published == null ? 'No data' : project.published ? 'Published' : 'Draft' }}</span></td>
+                        <td class="num">{{ format(project.turns) }}</td>
+                        <td><ng-container *ngTemplateOutlet="yesNo; context: { $implicit: project.multi_turn }"></ng-container></td>
+                        <td class="num">{{ format(project.slides_delivered) }}</td>
+                        <td class="num">{{ format(project.ai_turnaround_ms, 'duration') }}</td>
+                        <td class="num">{{ format(project.agent_processing_ms, 'duration') }}</td>
+                        <td class="num">{{ format(project.total_tokens, 'compact') }}</td>
+                        <td class="num">{{ format(project.cost_usd, 'currency') }}</td>
+                        <td><time [attr.datetime]="project.last_active" [title]="dateTime(project.last_active)">{{ shortDateTime(project.last_active) }}</time></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <ng-template #noProjects><div class="empty-state"><strong>No projects in this window</strong><span>No workflow activity was recorded for these dates.</span></div></ng-template>
+              </ng-container>
+              <footer class="pagination">
+                <span class="section-meta" aria-live="polite">{{ projectsLoading ? 'Loading...' : projectQuery ? 'Showing ' + projectRows.length + ' of ' + projectRange : projectRange }}</span>
+                <div class="pagination-controls"><label class="field page-size">Rows<select name="pageSize" [(ngModel)]="pageSize" (ngModelChange)="loadProjects(0)" [disabled]="projectsLoading"><option [ngValue]="25">25</option><option [ngValue]="50">50</option><option [ngValue]="100">100</option><option [ngValue]="200">200</option></select></label>
+                  <button class="btn btn-secondary icon-button" type="button" [disabled]="projectsLoading || pageOffset === 0" (click)="loadProjects(pageOffset - pageSize)" aria-label="Previous project page" title="Previous page"><lucide-icon name="chevron-left" [size]="16"></lucide-icon></button>
+                  <button class="btn btn-secondary icon-button" type="button" [disabled]="projectsLoading || pageOffset + pageSize >= projectTotal" (click)="loadProjects(pageOffset + pageSize)" aria-label="Next project page" title="Next page"><lucide-icon name="chevron-right" [size]="16"></lucide-icon></button>
+                </div>
+              </footer>
+            </div>
+          </details>
+
+          <details class="card tech" id="analytics-dq">
+            <summary>
+              <div><div class="tech-title">Data quality <span class="tech-hint">· what the pipeline could not capture</span></div>
+                <div class="tech-sub">
+                  <span *ngFor="let item of dataQualityFlagged" class="warn-text"><lucide-icon name="alert-triangle" [size]="13"></lucide-icon>{{ format(item.count) }} {{ item.label }}</span>
+                  <span *ngIf="!dataQualityFlagged.length" class="ok-text"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Every run and event in this window was captured</span>
+                </div></div>
+              <ng-container *ngTemplateOutlet="techToggle"></ng-container>
+            </summary>
+            <div class="tech-body">
+              <ul class="dq-grid">
+                <li *ngFor="let item of dataQuality" class="dq-item" [class.is-flagged]="(item.count ?? 0) > 0">
+                  <span class="dq-count">{{ format(item.count) }}</span>
+                  <span class="dq-label">{{ item.label }}</span>
+                  <p class="dq-why">{{ item.why }}</p>
+                  <span class="dq-affects">{{ (item.count ?? 0) > 0 ? 'Left out of' : 'Would affect' }} <b>{{ item.affects }}</b></span>
+                </li>
+              </ul>
+            </div>
+          </details>
+
+          <details class="card tech" id="analytics-raw">
+            <summary>
+              <div><div class="tech-title">Raw metrics</div>
+                <div class="tech-sub"><span>{{ format(rawCount) }} values across {{ rawGroups.length }} payload sections · per-agent and per-model rows are in the tables above</span></div></div>
+              <ng-container *ngTemplateOutlet="techToggle"></ng-container>
+            </summary>
+            <div class="tech-body">
+              <div class="raw">
+                <ng-container *ngFor="let group of rawGroups">
+                  <div class="raw-group subhead">{{ group.name }}</div>
+                  <div class="raw-row" *ngFor="let row of group.rows"><span class="raw-key" [title]="row.path">{{ row.key }}</span>
+                    <span class="raw-value"><span class="raw-text">{{ row.value }}</span><span *ngIf="row.extra" class="raw-extra">({{ row.extra }})</span><span *ngIf="row.type" class="metric-badge" [attr.data-type]="row.type">{{ row.type }}</span></span></div>
+                </ng-container>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+    </ng-container></ng-container>
+  </div>
+</section>
+
+<dialog #projectDialog class="project-drawer" aria-labelledby="project-detail-title" (cancel)="closeProject($event)" (click)="onDialogClick($event)">
+  <div class="drawer-layout">
+    <header class="drawer-heading"><div><span class="eyebrow">Project detail / all recorded activity</span><h2 id="project-detail-title">{{ selectedProject }}</h2><p class="section-meta">{{ appliedWindow.timezone }} <span class="sep">/</span> Measured</p></div><button type="button" class="btn btn-ghost icon-button" (click)="closeProject()" aria-label="Close project detail" title="Close project detail" autofocus><lucide-icon name="x" [size]="20"></lucide-icon></button></header>
+    <div class="drawer-body">
+      <div *ngIf="detailLoading" class="loading-heading" role="status"><span class="spinner-sm"></span> Loading project activity...</div>
+      <div *ngIf="detailError && !detailLoading" class="request-error" role="alert"><div><strong>Project detail unavailable</strong><p>{{ detailError }}</p></div><button type="button" class="btn btn-secondary" (click)="openProject(selectedProject!)">Retry detail</button></div>
+      <ng-container *ngIf="projectDetail as detail">
+        <div class="view-tabs detail-tabs" role="tablist" aria-label="Project activity" (keydown)="onDetailKey($event)">
+          <button type="button" id="workflow-tab" data-view="workflow" role="tab" aria-controls="workflow-panel" [attr.aria-selected]="detailTab === 'workflow'" [attr.tabindex]="detailTab === 'workflow' ? 0 : -1" (click)="detailTab = 'workflow'">Workflow <span>{{ detail.workflow_runs.length }}</span></button>
+          <button type="button" id="detail-agents-tab" data-view="agents" role="tab" aria-controls="detail-agents-panel" [attr.aria-selected]="detailTab === 'agents'" [attr.tabindex]="detailTab === 'agents' ? 0 : -1" (click)="detailTab = 'agents'">Agent runs <span>{{ detail.agent_runs.length }}</span></button>
+          <button type="button" id="ingestion-tab" data-view="ingestion" role="tab" aria-controls="ingestion-panel" [attr.aria-selected]="detailTab === 'ingestion'" [attr.tabindex]="detailTab === 'ingestion' ? 0 : -1" (click)="detailTab = 'ingestion'">Ingestion <span>{{ detail.ingestion_runs.length }}</span></button>
+        </div>
+        <div id="workflow-panel" role="tabpanel" aria-labelledby="workflow-tab" [hidden]="detailTab !== 'workflow'">
+          <ol class="workflow-timeline" *ngIf="detail.workflow_runs.length; else noWorkflow">
+            <li *ngFor="let run of detail.workflow_runs">
+              <header class="run-heading"><div><h3>Turn {{ format(run.turn_index) }} <span class="sep">/</span> {{ run.intent || 'Unknown intent' }}</h3><p class="run-id">{{ run.run_id }}</p></div><ng-container *ngTemplateOutlet="status; context: { $implicit: run.status }"></ng-container></header>
+              <div class="run-dates"><span>Started {{ dateTime(run.started_at) }}</span><span>Finished {{ dateTime(run.finished_at) }}</span></div>
+              <dl class="run-metrics"><div><dt>AI turnaround</dt><dd>{{ format(run.wall_ms, 'duration') }}</dd></div><div><dt>Deck version</dt><dd>{{ format(run.deck_version_id) }}</dd></div><div><dt>Slides created</dt><dd>{{ format(run.slides_created) }}</dd></div><div><dt>Slides updated</dt><dd>{{ format(run.slides_updated) }}</dd></div><div><dt>Slides translated</dt><dd>{{ format(run.slides_translated) }}</dd></div></dl>
+            </li>
+          </ol>
+          <ng-template #noWorkflow><div class="empty-state"><strong>No workflow runs recorded</strong></div></ng-template>
+        </div>
+        <div id="detail-agents-panel" role="tabpanel" aria-labelledby="detail-agents-tab" [hidden]="detailTab !== 'agents'">
+          <label class="field run-filter">Workflow run<select name="detailRun" [(ngModel)]="detailRunFilter"><option value="">All workflow runs</option><option *ngFor="let run of detail.workflow_runs" [value]="run.run_id">Turn {{ format(run.turn_index) }} / {{ run.intent || 'Unknown intent' }}</option></select></label>
+          <div *ngIf="filteredAgentRuns.length; else noAgentRuns" class="table-wrap" tabindex="0" role="region" aria-label="Every agent node run"><table class="data-table detail-agent-table">
+            <thead><tr><th scope="col">Agent / model / run</th><th scope="col">Workflow</th><th scope="col">Status</th><th scope="col">Started</th><th scope="col" class="num">Duration</th><th scope="col" class="num">LLM calls</th><th scope="col" class="num">Input tokens</th><th scope="col" class="num">Output tokens</th><th scope="col" class="num">Cached input</th><th scope="col" class="num">Cost (USD)</th><th scope="col" class="num">Work units</th><th scope="col">Pricing</th></tr></thead>
+            <tbody><tr *ngFor="let run of filteredAgentRuns"><th scope="row" class="identity-cell"><strong>{{ agentLabel(run.agent_name) }}</strong><span>{{ run.model || 'Unknown model' }}</span><small>{{ run.agent_run_id }}</small></th><td [title]="run.workflow_run_id">{{ workflowLabel(run.workflow_run_id) }}</td><td><ng-container *ngTemplateOutlet="status; context: { $implicit: run.status }"></ng-container></td><td>{{ dateTime(run.started_at) }}</td><td class="num">{{ format(run.duration_ms, 'duration') }}</td><td class="num">{{ format(run.llm_calls) }}</td><td class="num">{{ format(run.input_tokens) }}</td><td class="num">{{ format(run.output_tokens) }}</td><td class="num">{{ format(run.cached_input_tokens) }}</td><td class="num">{{ format(run.cost_usd, 'currency') }}</td><td class="num">{{ format(run.work_units) }}<small>{{ run.work_unit_type || 'No unit type' }}</small></td><td><ng-container *ngTemplateOutlet="status; context: { $implicit: run.pricing_status }"></ng-container></td></tr></tbody>
+          </table></div>
+          <ng-template #noAgentRuns><div class="empty-state"><strong>No agent runs recorded</strong></div></ng-template>
+        </div>
+        <div id="ingestion-panel" role="tabpanel" aria-labelledby="ingestion-tab" [hidden]="detailTab !== 'ingestion'">
+          <div *ngIf="detail.ingestion_runs.length; else noIngestion" class="table-wrap" tabindex="0" role="region" aria-label="Document ingestion runs"><table class="data-table ingestion-table">
+            <thead><tr><th scope="col">Document / ingestion run</th><th scope="col">Status</th><th scope="col">Started</th><th scope="col" class="num">Duration</th><th scope="col" class="num">Processed</th><th scope="col" class="num">Pages</th><th scope="col" class="num">Chunks</th></tr></thead>
+            <tbody><tr *ngFor="let run of detail.ingestion_runs"><th scope="row" class="identity-cell">{{ run.document_id }}<small>{{ run.ingestion_run_id }}</small></th><td><ng-container *ngTemplateOutlet="status; context: { $implicit: run.status }"></ng-container></td><td>{{ dateTime(run.started_at) }}</td><td class="num">{{ format(run.duration_ms, 'duration') }}</td><td class="num">{{ formatBytes(run.bytes_processed) }}</td><td class="num">{{ format(run.pages_processed) }}</td><td class="num">{{ format(run.chunks_created) }}</td></tr></tbody>
+          </table></div>
+          <ng-template #noIngestion><div class="empty-state"><strong>No document ingestion recorded</strong></div></ng-template>
+        </div>
+      </ng-container>
+    </div>
+  </div>
+</dialog>
+
+<!-- ============ Shared fragments ============ -->
+<ng-template #status let-value><span class="status-pill" [ngClass]="statusClass(value)">{{ value || 'No data' }}</span></ng-template>
+<ng-template #yesNo let-value>
+  <span *ngIf="value === true" class="check" title="Yes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span class="sr-only">Yes</span></span>
+  <span *ngIf="value !== true" class="section-meta">{{ value === false ? '—' : 'No data' }}<span *ngIf="value === false" class="sr-only">No</span></span>
+</ng-template>
+<ng-template #infoIcon><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></ng-template>
+<ng-template #ring let-rate="rate" let-text="text" let-label="label">
+  <svg class="ring" width="72" height="72" viewBox="0 0 72 72" role="img" [attr.aria-label]="label">
+    <circle class="ring-track" cx="36" cy="36" r="32" stroke-width="8"></circle>
+    <circle class="ring-fill" cx="36" cy="36" r="32" stroke-width="8" [attr.stroke-dasharray]="ringDash(rate, 32)" transform="rotate(-90 36 36)"></circle>
+    <text class="ring-text" x="50%" y="50%" dy=".35em" text-anchor="middle">{{ text }}</text>
+  </svg>
+</ng-template>
+<ng-template #details let-rows="rows" let-note="note">
+  <details class="more">
+    <summary><span class="more-show">Details</span><span class="more-hide">Hide details</span><lucide-icon name="chevron-down" [size]="14" class="chev"></lucide-icon></summary>
+    <div class="more-body">
+      <dl class="kv"><div class="kv-row" *ngFor="let row of rows"><dt>{{ row.label }}</dt><dd>{{ row.value }}<span *ngIf="row.type" class="metric-badge" [attr.data-type]="row.type">{{ row.type }}</span></dd></div></dl>
+      <p *ngIf="note" class="kv-note"><ng-container *ngTemplateOutlet="infoIcon"></ng-container><span>{{ note }}</span></p>
+    </div>
+  </details>
+</ng-template>
+<ng-template #statGrid let-tiles>
+  <div class="stats"><div class="stat" *ngFor="let tile of tiles"><div class="stat-label">{{ tile.label }}</div><div class="stat-value">{{ tile.value }}</div><div class="stat-caption" *ngIf="tile.caption">{{ tile.caption }}</div></div></div>
+</ng-template>
+<ng-template #hbars let-bars>
+  <div class="hbars" role="img" [attr.aria-label]="barsLabel(bars)">
+    <div class="hbar" *ngFor="let bar of bars"><span>{{ bar.label }}</span><div class="hbar-track"><div class="hbar-fill" [attr.data-tone]="bar.tone || null" [style.width.%]="bar.width"></div></div><span class="hbar-val">{{ bar.value }}</span></div>
+  </div>
+</ng-template>
+<ng-template #techToggle>
+  <span class="tech-toggle"><span class="tech-show">Show details</span><span class="tech-hide">Hide details</span><lucide-icon name="chevron-down" [size]="16" class="chev"></lucide-icon></span>
+</ng-template>

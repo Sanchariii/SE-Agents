@@ -1,0 +1,21 @@
+:host {
+  display: block;
+}
+
+// Host boxes must not change the original app/main flex and grid layout.
+app-login,
+app-boot,
+app-header,
+app-training-studio,
+app-pipeline,
+app-approvals,
+app-analytics {
+  display: contents;
+}
+
+// Hide inactive tab hosts without destroying their component state.
+app-pipeline[hidden],
+app-approvals[hidden],
+app-analytics[hidden] {
+  display: none;
+}

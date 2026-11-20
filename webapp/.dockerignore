@@ -1,0 +1,15 @@
+node_modules
+dist
+.vite
+.git
+.gitignore
+Dockerfile
+README.md
+*.log
+.env
+# .env.local is intentionally NOT ignored: Dockerfile.local checks for it (build stage
+# only) to select the local backend URL. The nginx runtime image copies just dist/,
+# so the file never ends up in the final image.
+.env.development.local
+.env.test.local
+.env.production.local
