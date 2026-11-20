@@ -787,7 +787,48 @@ class ReferenceDesignConstants:
         "content, and then echo the reference's own style (its shapes, spacing, title "
         "treatment). Do not add red/navy brand accents, cards, bars or decorations the "
         "reference does not use. Never copy any wording from the reference - every word "
-        "comes from this slide's content.")
+        "comes from this slide's content. Never draw or place a logo: the Rockwell logo "
+        "is already part of the layouts.")
+
+    # --- Rockwell's logo on the reference (app.genai.ppt.reference_rebrand) --------- #
+    #: Bump when the preparation changes, so copies prepared by an older build are
+    #: not reused from the cache.
+    PREPARED_VERSION = 2
+    #: A picture is a logo candidate when it is this small (inches / share of slide).
+    LOGO_MIN_SIDE_IN = 0.15
+    LOGO_MAX_SIDE_IN = 3.6
+    LOGO_MAX_AREA_SHARE = 0.04
+    #: ...and an unrecognised one is another company's logo when its centre is this
+    #: close to a corner, it sits on a master, or it repeats on this many layouts.
+    LOGO_CORNER_X_IN = 2.5
+    LOGO_CORNER_Y_IN = 1.6
+    LOGO_MIN_REPEATS = 3
+    #: Perceptual match against Rockwell's marks: a FINGERPRINT_SIZE^2-bit difference
+    #: hash. Rockwell variants measured 3-28 bits apart, other logos 98+.
+    FINGERPRINT_SIZE = 16
+    MATCH_MAX_BITS = 40
+    MAX_ASPECT_DRIFT = 1.3
+    #: Replacement marks, under PptConstants.LOGO_DIR. A box at least this wide for its
+    #: height takes the full lockup; a compact one the RA hexagon.
+    LOCKUP_MIN_ASPECT = 2.0
+    HEXAGON = "ra_mark.png"
+    LOCKUP_COLOR = "ra_lockup_color.png"
+    LOCKUP_WHITE = "ra_lockup_white.png"
+    #: A layout with no logo gets the hexagon at this width, this far from the top
+    #: corner (left first, then right).
+    ADDED_MARK_WIDTH_IN = 0.6
+    ADDED_MARK_MARGIN_IN = 0.3
+    #: The lockup, when one is added (in the footer band when both top corners are
+    #: taken, or in white over a dark background or photo), at this height; in the
+    #: footer band it sits this far left of the slide number.
+    ADDED_LOCKUP_HEIGHT_IN = 0.28
+    FOOTER_MARK_GAP_IN = 0.15
+    #: A shape covering this share of the slide is a background, not an obstacle; a
+    #: picture or text-free shape covering BACKDROP_AREA_SHARE is a photo area a logo
+    #: may sit on.
+    BACKGROUND_AREA_SHARE = 0.8
+    BACKDROP_AREA_SHARE = 0.15
+    MARK_SHAPE_NAME = "Rockwell logo"
 
 
 class PptConstants:

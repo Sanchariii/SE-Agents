@@ -111,12 +111,19 @@ def frame_for_layout(classification: str, slide_width: float, slide_height: floa
     luminance = getattr(layout, "background_luminance", 1.0)
     variant = builder.logo_variant_for(luminance)
     logo_file = "d2r_mark_white.png" if variant == "white" else "d2r_mark.png"
-    logo = registry.logo_path(logo_file)
+    # A reference deck already carries Rockwell's logo in its layouts
+    # (`reference_rebrand`), often in the corner the frame would stamp; a second mark
+    # there would sit on top of it.
+    reference = registry.template_override()
+    logo = None if reference is not None else registry.logo_path(logo_file)
+    if reference is not None:
+        log.debug("slide %d: reference design %s carries its own Rockwell logo; the "
+                  "frame adds none", slide_number, reference.name)
     symbol = registry.classification_symbol(classification)
     if symbol is None:
         log.warning("slide %d: no policy symbol on disk for %r; the classification "
                     "label ships without its mark", slide_number, classification)
-    if logo is None:
+    if logo is None and reference is None:
         log.warning("slide %d: brand mark %s is not on disk; no logo will be "
                     "placed", slide_number, logo_file)
     log.debug("slide %d frame: %s on %s (luminance %.2f) -> %s logo",

@@ -17,18 +17,23 @@ backgrounds, artwork, colours and fonts - and nothing else:
    token resolves to the reference's theme. ``GUIDANCE`` tells the designer to copy
    the design faithfully.
 
-The stamped frame (classification label, slide number, Rockwell mark) stays on every
-slide, as on any deck the app publishes.
+The logo is the one part of the design that is never copied: ``prepare`` also runs
+``reference_rebrand.rebrand``, which keeps Rockwell marks, swaps any other company's
+logo for Rockwell's and adds Rockwell's to layouts that have none. The stamped frame
+(classification label and slide number) stays on every slide, as on any deck the app
+publishes.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.config.constants import ReferenceDesignConstants as C
+from app.genai.ppt.reference_rebrand import RebrandReport
 from app.utilities.logger_util import get_logger
 
 log = get_logger(__name__)
@@ -130,12 +135,14 @@ class Prepared:
     path: Path
     filename: str
     sha256: str
+    #: What happened to the reference's logos.
+    rebrand: RebrandReport = field(default_factory=RebrandReport)
 
     @property
     def cache_key(self) -> str:
         """Appended to every slide's cache key, so a slide built on another design is
         never reused."""
-        return f"|ref:{self.sha256[:12]}"
+        return f"|ref:{self.sha256[:12]}:v{C.PREPARED_VERSION}"
 
 
 def strip_slides(data: bytes, out_path: Path, suffix: str = ".pptx") -> None:
@@ -159,6 +166,42 @@ def strip_slides(data: bytes, out_path: Path, suffix: str = ".pptx") -> None:
         partial.replace(out_path)
     finally:
         raw.unlink(missing_ok=True)
+
+
+def rebrand_file(path: Path) -> RebrandReport:
+    """Put Rockwell's logo on the prepared reference at ``path``, in place.
+
+    The catalog is read first so a replacement mark can be the white lockup where the
+    layout's background is dark.
+
+    Raises:
+        Whatever reading or saving the deck raises; ``prepare`` turns that into the
+        brand-template fallback, because a reference that might still carry another
+        company's logo must not be built on.
+    """
+    from app.genai.ppt import reference_rebrand
+    from app.genai.ppt.template import catalog as catalog_mod, loader
+
+    catalog = catalog_mod.load(str(path))
+
+    def luminance_of(master_index: int, layout_index: int | None) -> float:
+        if layout_index is not None:
+            layout = catalog.get(f"M{master_index}-L{layout_index}")
+            return layout.background_luminance if layout else 1.0
+        values = [l.background_luminance for l in catalog.layouts
+                  if l.master_index == master_index]
+        return sum(values) / len(values) if values else 1.0
+
+    def shade_of(master_index: int, shape) -> float | None:
+        if not catalog.themes:
+            return None
+        theme = catalog.themes[min(master_index, len(catalog.themes) - 1)]
+        return catalog_mod.shape_luminance(shape, theme)
+
+    prs = loader.open_presentation(str(path))
+    report = reference_rebrand.rebrand(prs, luminance_of, shade_of=shade_of)
+    prs.save(str(path))
+    return report
 
 
 def problems(path: Path) -> list[str]:
@@ -199,8 +242,13 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
     digest = reference.get("sha256") or ""
     folder = cache_dir or Path(tempfile.gettempdir()) / C.CACHE_DIRNAME
     try:
-        target = folder / f"{hashlib.sha1(digest.encode()).hexdigest()[:16]}.pptx"
-        if not target.is_file():
+        target = folder / (f"{hashlib.sha1(digest.encode()).hexdigest()[:16]}"
+                           f"-v{C.PREPARED_VERSION}.pptx")
+        report_path = target.with_suffix(".json")
+        if target.is_file():
+            report = RebrandReport.from_dict(
+                json.loads(report_path.read_text()) if report_path.is_file() else {})
+        else:
             if read_bytes is None:
                 from app.utilities import storage_util
                 read_bytes = storage_util.read_file
@@ -211,7 +259,16 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
             if digest and actual != digest:
                 raise ValueError("the stored file does not match the uploaded one")
             digest = digest or actual
-            strip_slides(data, target, Path(name).suffix.lower() or ".pptx")
+            # Built under a work name and moved into place only when complete, so a
+            # failure part-way never leaves a copy without Rockwell's logo in the cache.
+            work = target.with_name(target.stem + ".work.pptx")
+            try:
+                strip_slides(data, work, Path(name).suffix.lower() or ".pptx")
+                report = rebrand_file(work)
+                report_path.write_text(json.dumps(report.to_dict()))
+                work.replace(target)
+            finally:
+                work.unlink(missing_ok=True)
         found = problems(target)
         if found:
             raise ValueError("; ".join(found))
@@ -223,7 +280,7 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
                       "built on the Rockwell template instead.")
     log.info("reference design ready: %s -> %s", name, target.name,
              extra={"session_id": session_id})
-    return Prepared(path=target, filename=name, sha256=digest), ""
+    return Prepared(path=target, filename=name, sha256=digest, rebrand=report), ""
 
 
 def with_guidance(params: dict) -> dict:

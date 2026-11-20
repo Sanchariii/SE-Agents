@@ -816,6 +816,26 @@ def _fill_luminance(shape, theme: ThemeInfo) -> Optional[float]:
     return None
 
 
+def shape_luminance(shape, theme: ThemeInfo) -> Optional[float]:
+    """How light one master/layout shape looks: a picture's mean luminance, else its
+    solid or gradient fill's. 0 dark .. 1 light, None when it cannot be told (an
+    empty picture placeholder, no fill).
+
+    Args:
+        shape: A python-pptx shape.
+        theme: The theme of the shape's master, for theme colours.
+    """
+    if getattr(shape, "is_placeholder", False):
+        return None
+    try:
+        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+            return _image_luminance(shape.image.blob)
+    except Exception as exc:                 # noqa: BLE001 — a linked picture, say
+        log.debug("picture %r cannot be measured: %s", shape.name, exc)
+        return None
+    return _fill_luminance(shape, theme)
+
+
 @lru_cache(maxsize=64)
 def _image_luminance(blob: bytes) -> Optional[float]:
     """Mean perceived luminance of an embedded background image, 0 dark .. 1 light.

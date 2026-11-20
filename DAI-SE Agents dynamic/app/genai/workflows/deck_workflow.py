@@ -1441,9 +1441,12 @@ def _collect(state: WorkflowState) -> dict:
             _step(sid, "deck", reference_note)
         if reference is not None:
             _step(sid, "deck", f"Copying the design of {reference.filename}.")
+            logo_note = reference.rebrand.note()
+            if logo_note:
+                _step(sid, "deck", logo_note)
             gaps.append(f"Design copied from {reference.filename} (layouts, colours and "
-                        "fonts only); the Rockwell classification label and mark stay "
-                        "on every slide.")
+                        "fonts only); every slide carries the Rockwell logo and "
+                        "classification label." + (f" {logo_note}" if logo_note else ""))
         with registry.using_template(reference.path if reference else None):
             # One contract for the whole deck, before any slide is built: this is what
             # makes four parallel workers produce slides that read as one deck rather
