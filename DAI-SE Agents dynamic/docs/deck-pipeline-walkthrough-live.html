@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How a deck gets built</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E8ECEF; --surface:#FFFFFF; --ink:#18232E; --muted:#5D6B78; --rule:#C3CCD4;
+    --teal:#13707A; --teal-soft:#E3F2F2; --amber:#B7790C; --amber-soft:#FBF1DC; --red:#B23A30; --green:#2C7A4B; --green-soft:#E1F1E7;
+    --sans:"Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --serif:"Instrument Serif", Georgia, serif;
+    --mono:ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);display:flex;flex-direction:column}
+  button{font:inherit;color:inherit}
+  :focus-visible{outline:2.5px solid var(--teal);outline-offset:2px;border-radius:6px}
+
+  .turns{display:flex;justify-content:center;gap:6px;padding:12px 20px 0}
+  .turns button{background:transparent;border:1px solid transparent;border-radius:999px;padding:6px 16px;cursor:pointer;font-size:15px;font-weight:500;color:var(--muted);transition:background .3s,color .3s,border-color .3s}
+  .turns button:hover{color:var(--ink)}
+  .turns button[aria-selected="true"]{background:var(--surface);border-color:var(--rule);color:var(--ink);font-weight:600}
+  .turns button b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--rule);color:#fff;font-size:12px;margin-right:8px;transition:background .3s}
+  .turns button[aria-selected="true"] b{background:var(--teal)}
+
+  .stage{flex:1;min-height:0;display:flex;padding:8px 20px 0}
+  .stage svg{flex:1;min-height:0;width:100%;height:100%;display:block}
+  .stage svg.enter{animation:enter .6s ease both}
+  @keyframes enter{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+
+  .caption{height:76px;display:flex;align-items:center;justify-content:center;gap:16px;padding:0 20px 10px}
+  .caption .num{width:38px;height:38px;border-radius:50%;background:var(--teal);color:#fff;display:grid;place-items:center;font-weight:700;font-size:17px;flex:none;transition:background .3s}
+  .caption .num.all{background:var(--ink);font-size:13px}
+  .caption .txt{font-family:var(--serif);font-size:30px;line-height:1.1}
+  .caption .txt.swap{animation:swap .5s ease both}
+  @keyframes swap{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .dots{display:flex;gap:6px;margin-left:10px}
+  .dots i{width:8px;height:8px;border-radius:50%;background:var(--rule);transition:background .3s}
+  .dots i.on{background:var(--teal)}
+  .dots i.past{background:var(--ink);opacity:.45}
+
+  .controls{position:fixed;right:16px;bottom:14px;display:flex;gap:6px;opacity:.15;transition:opacity .25s}
+  .controls:hover,.controls:focus-within{opacity:1}
+  .controls button{background:var(--surface);border:1px solid var(--rule);border-radius:999px;width:38px;height:38px;cursor:pointer;font-size:14px}
+  .controls button:hover{border-color:var(--ink)}
+
+  svg text{font-family:var(--sans);fill:var(--ink)}
+  .grp rect{fill:#F4F6F8;stroke:var(--rule);stroke-width:1;stroke-dasharray:5 4;transition:fill .4s,stroke .4s,opacity .4s}
+  .grp text{font-size:13px;font-weight:600;fill:var(--muted);transition:fill .4s}
+  .grp.is-active rect{fill:#EEF7F7;stroke:var(--teal)}
+  .grp.is-active text{fill:var(--teal)}
+  .grp.is-todo{opacity:.45}
+
+  .node{cursor:pointer;transition:opacity .45s}
+  .node .shape{fill:var(--surface);stroke:#8795A3;stroke-width:1.4;transition:fill .4s,stroke .4s,stroke-width .4s}
+  .node .t{font-size:15px;font-weight:600;transition:fill .4s}
+  .node .s{font-size:12.5px;fill:var(--muted)}
+  .node .s.code{font-family:var(--mono);font-size:13px;fill:var(--ink)}
+  .node .badge circle{fill:var(--ink);transition:fill .4s}
+  .node .badge text{fill:#fff;font-size:12px;font-weight:700}
+  .node.is-todo{opacity:.28}
+  .node.is-done .shape{stroke:var(--ink)}
+  .node.is-active .shape{fill:var(--teal-soft);stroke:var(--teal);stroke-width:2.6}
+  .node.is-active .badge circle{fill:var(--teal)}
+  .node.is-active .t{fill:var(--teal)}
+  .node.gate.is-active .shape{fill:var(--green-soft);stroke:var(--green)}
+  .node.gate.is-active .t{fill:var(--green)}
+  .node.gate.failing .shape{fill:#F8E4E1;stroke:var(--red)}
+  .node.gate.failing .t{fill:var(--red)}
+  .halo{fill:none;stroke:var(--teal);stroke-width:2;opacity:0}
+  .node.is-active .halo{animation:halo 2.2s ease-out infinite}
+  .node.gate .halo{stroke:var(--green)}
+  .node.gate.failing .halo{stroke:var(--red)}
+  @keyframes halo{0%{opacity:.55;stroke-width:2}100%{opacity:0;stroke-width:16}}
+
+  /* Work-order result tiles (turn 2) */
+  .node.tile .t{font-size:14px}
+  .node.keep.is-active .shape{fill:#F4F6F8;stroke:#9AA6B2;stroke-width:1.4;stroke-dasharray:4 3}
+  .node.keep.is-active .t{fill:var(--muted)}
+  .node.keep .halo{display:none}
+  .node.relayout.is-active .shape{fill:var(--amber-soft);stroke:var(--amber)}
+  .node.relayout.is-active .t{fill:#8A5B07}
+  .node.relayout .halo{stroke:var(--amber)}
+  .node.tile.is-active .s{font-weight:600}
+
+  /* Human-in-the-loop style questions and sliders */
+  .grp.ask.is-active rect{fill:#FDF6E8;stroke:var(--amber)}
+  .grp.ask.is-active text{fill:#8A5B07}
+  .node.ask.is-active .shape{fill:var(--amber-soft);stroke:var(--amber)}
+  .node.ask.is-active .t{fill:#8A5B07}
+  .node.ask.is-active .badge circle{fill:var(--amber)}
+  .node.ask .halo{stroke:var(--amber)}
+
+  .edge path{fill:none;stroke:#8795A3;stroke-width:1.6;transition:stroke .4s,stroke-width .4s}
+  .edge.evidence path{stroke:var(--amber);stroke-dasharray:6 5}
+  .edge.fail path{stroke:var(--red);stroke-dasharray:6 5}
+  .edge.pass path{stroke:var(--green)}
+  .edge.is-active path{stroke-width:2.4}
+  .edge.is-active:not(.evidence):not(.fail):not(.pass) path{stroke:var(--teal)}
+  .edge.is-todo{opacity:.22}
+  .edge{transition:opacity .4s}
+  .edge text{font-size:12px;font-weight:600}
+  .edge .lbl-bg{fill:var(--surface)}
+  .edge.evidence text{fill:var(--amber)}
+  .edge.fail text{fill:var(--red)}
+  .edge.pass text{fill:var(--green)}
+  .token{pointer-events:none}
+
+  @media (prefers-reduced-motion:reduce){ *,*::before,*::after{animation:none !important;transition:none !important} }
+</style>
+</head>
+<body>
+
+<div class="turns" role="tablist" aria-label="Conversation turn">
+  <button role="tab" id="tab0" aria-selected="true"><b>1</b>First request: build the deck</button>
+  <button role="tab" id="tab1" aria-selected="false"><b>2</b>Next turn: change the deck</button>
+  <button role="tab" id="tab2" aria-selected="false"><b>3</b>Inside the designer: one slide</button>
+</div>
+<div class="stage" id="stage">
+  <svg id="diagram" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Animated flowchart"></svg>
+</div>
+<div class="caption" aria-live="polite">
+  <div class="num" id="capNum">1</div>
+  <div class="txt" id="capTxt"></div>
+  <div class="dots" id="dots"></div>
+</div>
+<div class="controls">
+  <button id="prev" aria-label="Previous step">◀</button>
+  <button id="play" aria-label="Pause">❚❚</button>
+  <button id="next" aria-label="Next step">▶</button>
+</div>
+
+<script>
+/* ===== Timing: change these to speed up or slow down ===== */
+const STEP_MS = 20000;      // time on each box
+const OVERVIEW_MS = 9000;   // whole diagram running, before moving on
+const TOKEN_SPEED = 170;    // px per second for the moving dots
+
+/* ================= Turn 1: build the deck ================= */
+const SX = {S1:190,S2:470,S3:750,SN:1030};
+const SCENE1 = {
+  viewBox:'0 0 1200 1105',
+  steps:9,
+  final:['OUT'],
+  failStep:7,
+  failWindow:[8,13],
+  captions:[
+    'The whole pipeline, end to end',
+    'Documents are read and indexed in the background',
+    'Triage works out what you actually want',
+    'Asked once: how creative, and how many slides?',
+    'The planner writes the blueprint, with slide types',
+    'The work order: which slides really change?',
+    'Slide agents research and write, four at once',
+    'Design, the brand gate, then max mode: High slides go on-brand onto their own master',
+    'Quiz answers: the same slide, right option highlighted',
+    'Publish: a new version, in up to 7 languages',
+  ],
+  nodes:[
+    {id:'U',  x:200, y:50,  w:360, h:54, shape:'pill', title:['👤 You'], sub:['“Build a training deck with a quiz…”'], step:2},
+    {id:'D',  x:820, y:50,  w:300, h:64, shape:'cyl',  title:['📄 Your documents'], sub:['PDF, Office, images, video'], step:1},
+    {id:'X',  x:560, y:180, w:190, h:64, shape:'rect', title:['Extract'], sub:['text, tables, frames'], step:1},
+    {id:'CH', x:810, y:180, w:190, h:64, shape:'rect', title:['Chunk'], sub:['and summarise'], step:1},
+    {id:'IX', x:1060,y:180, w:190, h:64, shape:'cyl',  title:['Search index'], sub:['ready for search'], step:1},
+    {id:'T',  x:200, y:180, w:320, h:80, shape:'rect', num:1, title:['Triage agent'], sub:['What does the user want?','Splits one message into instructions'], step:2},
+    {id:'Q',  x:600, y:346, w:320, h:100, shape:'rect', cls:'ask', num:2, title:['🎚 Style questions'], sub:['Creativity: Low · Med · High','Slides: 5-10 · 10-15 · 15-20 · 20+','size again for a new deck or resize'], step:3},
+    {id:'P',  x:200, y:290, w:320, h:80, shape:'rect', num:3, title:['Planner agent'], sub:['Blueprint: slides, key points,','type: NORMAL · QUIZ · FAQ'], step:4},
+    {id:'PR', x:200, y:392, w:320, h:72, shape:'rect', num:4, title:['🔒 Plan rules (code)'], sub:['answer slide after each quiz;','cap → notes · never over 100 slides'], step:4},
+    {id:'WO', x:200, y:494, w:320, h:80, shape:'rect', num:5, title:['Work order'], sub:['Per slide: create, edit,','relayout, keep or remove'], step:5},
+    {id:'S1', x:190, y:710, w:230, h:64, shape:'rect', title:['Slide agent 1'], sub:['research, then write'], step:6},
+    {id:'S2', x:470, y:710, w:230, h:64, shape:'rect', title:['Slide agent 2'], sub:['research, then write'], step:6},
+    {id:'S3', x:750, y:710, w:230, h:64, shape:'rect', title:['Slide agent 3'], sub:['research, then write'], step:6},
+    {id:'SN', x:1030,y:710, w:230, h:64, shape:'rect', title:['… slide N'], sub:['research, then write'], step:6},
+    {id:'AD', x:400, y:900, w:260, h:76, shape:'rect', num:6, title:['Art director'], sub:['One plan for the whole deck:','a real template layout per slide'], step:7},
+    {id:'DS', x:720, y:900, w:260, h:76, shape:'rect', num:7, title:['Designer agents'], sub:['5 in parallel; High creativity →','max mode: render + visual review'], step:7},
+    {id:'G',  x:1020,y:900, w:230, h:130,shape:'diamond', cls:'gate', title:['🛡️ Brand and','layout gate'], sub:['15 automatic checks'], step:7},
+    {id:'AR', x:400, y:1050,w:280, h:76, shape:'rect', num:8, title:['✅ Quiz answer slide'], sub:['quiz slide re-run with the','right option highlighted'], step:8},
+    {id:'PUB',x:720, y:1050,w:300, h:72, shape:'rect', num:9, title:['Publish'], sub:['Stitch, translate, save as v1, v2…','up to 7 languages'], step:9},
+    {id:'OUT',x:1040,y:1050,w:280, h:60, shape:'pill', title:['📊 Rockwell-branded .pptx'], sub:['preview and download in the browser'], step:9},
+  ],
+  groups:[
+    {id:'INGEST', x:440, y:100, w:740, h:140, label:'Background: read and index', align:'end', nodes:['X','CH','IX']},
+    {id:'BRAIN',  x:20,  y:104, w:360, h:450, label:'Understand and plan', nodes:['T','P','PR','WO']},
+    {id:'ASK',    x:420, y:254, w:360, h:160, cls:'ask', label:'Ask once: style and deck size', nodes:['Q']},
+    {id:'BUILD',  x:20,  y:586, w:1160,h:176, label:'Write: slide agents, 4 in parallel · copy principles keep text short', nodes:['S1','S2','S3','SN']},
+    {id:'DESIGN', x:20,  y:798, w:1160,h:184, label:'Design: Rockwell template · High creativity adds max mode on the High Creativity master', nodes:['AD','DS','G']},
+  ],
+  edges:[
+    {pts:[[670,50],[560,50],[560,148]], to:'X', step:1, delay:0},
+    {pts:[[655,180],[715,180]], to:'CH', step:1, delay:2},
+    {pts:[[905,180],[965,180]], to:'IX', step:1, delay:4},
+    {pts:[[200,77],[200,140]], to:'T', step:2, delay:0},
+    {pts:[[360,170],[410,170],[410,316],[438,316]], to:'Q', step:3, delay:0},
+    {pts:[[438,370],[392,370],[392,300],[362,300]], to:'P', step:4, delay:0},
+    {pts:[[200,330],[200,354]], to:'PR', step:4, delay:11},
+    {pts:[[200,428],[200,452]], to:'WO', step:5, delay:0},
+    ...Object.entries(SX).map(([id,x]) => ({pts:[[360,494],[410,494],[410,632],[x-40,632],[x-40,678]], to:id, step:6, delay:0})),
+    ...Object.entries(SX).map(([id,x],i) => ({pts:[[1060,212],[1060,650],[x+40,650],[x+40,678]], to:id, step:6, delay:3, cls:'evidence',
+        label: i===0 ? {text:['evidence from','your docs'], x:1072, y:470, anchor:'start'} : null})),
+    ...Object.entries(SX).map(([id,x]) => ({pts:[[x,742],[x,782],[400,782],[400,862]], to:'AD', step:7, delay:0})),
+    {pts:[[530,900],[590,900]], to:'DS', step:7, delay:2.5},
+    {pts:[[850,900],[905,900]], to:'G', step:7, delay:5},
+    {pts:[[1020,835],[1020,818],[720,818],[720,862]], to:'DS', step:7, delay:8, until:13, cls:'fail', label:{text:['fail: fix and retry'], x:870, y:822, anchor:'middle', bg:true}},
+    {pts:[[1020,965],[1020,995],[400,995],[400,1010]], to:'AR', step:8, delay:0, cls:'pass', label:{text:['pass'], x:1032, y:985, anchor:'start'}},
+    {pts:[[540,1050],[568,1050]], to:'PUB', step:9, delay:0},
+    {pts:[[870,1050],[900,1050]], to:'OUT', step:9, delay:3},
+  ],
+  status:{
+    1:[[0,'D','PDF, Office, images, video'],[5,'IX','indexing…'],[11,'IX','100% indexed ✓'],[13,'D','all documents read ✓']],
+    2:[[3,'T','brief: goal ✓ audience ✓ deck type ✓'],[9,'T','style + size not chosen → ask once']],
+    3:[[1.5,'Q','sliders sent to your browser…'],[8,'Q','you chose: High · 10-15 slides'],[13,'Q','saved for the session ✓']],
+    4:[[3,'P','audience, objective, tone…'],[6,'P','6 slides incl. 1 quiz, 1 FAQ ✓'],[9,'P','+ private design notes per slide'],[13,'PR','answer slide added after the quiz ✓']],
+    5:[[3,'WO','create · edit · relayout · keep · remove'],[10,'WO','untouched slides kept: no cost']],
+    6:[[1,'S1','searching your docs…'],[1.3,'S2','searching your docs…'],[1.6,'S3','searching your docs…'],[1.9,'SN','searching your docs…'],
+       [7,'S1','writing from evidence…'],[7.4,'S2','gap reported: not in docs'],[7.8,'S3','quiz: question + 4 options'],[8.2,'SN','FAQ: real audience questions'],
+       [13,'S1','slide written ✓'],[13.5,'S3','answer → speaker notes ✓'],[14,'SN','FAQ written ✓']],
+    7:[[1.5,'AD','choosing one layout per slide…'],[4,'DS','drawing 5 slides at once…'],[6,'G','checking 1–15…'],
+       [8,'G','check 7 failed ✕'],[9,'DS','fixing and redrawing…'],[13,'G','15 of 15 passed ✓'],[13,'DS','quiz & FAQ: one shared layout ✓'],
+       [15,'AD','content → High Creativity master'],[15.5,'DS','rendered → visual review 7/10, redo…'],
+       [16.5,'AD','brand colours + Barlow; sample title stripped'],[18,'DS','visual review 9/10 ✓']],
+    8:[[1.5,'AR','re-running the quiz program…'],[6,'AR','option B highlighted, nothing else ✓']],
+    9:[[1,'PUB','stitched · High master kept on brand'],[2.5,'PUB','saved as v1'],[4,'PUB','EN · FR · ES · PT · ZH · JA · DE'],[5,'OUT','ready to preview ✓']],
+  },
+};
+
+/* ===== Result tiles for turn 2: [title, sub, style] ===== */
+const TILE_W = 130;
+const TILE_X = [80,228,376,524,672,820,968,1116];
+const tileNodes = (list, appear0) => list.map((t,i)=>({id:'R'+(i+1), x:TILE_X[i], y:625, w:TILE_W, h:64, shape:'rect', cls:'tile '+t[2], title:[t[0]], sub:[t[1]], step:4, appear:appear0+i*0.35}));
+const tileIds = list => list.map((t,i)=>'R'+(i+1));
+
+/* ================= Turn 2: change the deck ================= */
+const TILES = [
+  ['Slide 1','keep','keep'],['Slide 2','keep','keep'],['Slide 3','relayout','relayout'],['Slide 4','keep','keep'],
+  ['New slide 5','create','create'],['Quiz 6','keep (was 5)','keep'],['Answer 7','keep (was 6)','keep'],['FAQ 8','keep (was 7)','keep'],
+];
+const SCENE2 = {
+  viewBox:'0 105 1200 590',
+  steps:4,
+  final:tileIds(TILES),
+  captions:[
+    'Next turn: one message, only two slides reworked',
+    'A follow-up message arrives on the existing deck',
+    'Triage splits it into two instructions',
+    'Each instruction becomes a planner tool call',
+    'The work order compares before and after',
+  ],
+  nodes:[
+    {id:'V1', x:140, y:150, w:240, h:56, shape:'pill', title:['📊 Deck v1'], sub:['7 slides, built in the first turn'], step:1},
+    {id:'M',  x:140, y:330, w:240, h:140, shape:'rect', title:['💬 One message'], sub:['“Put slide 3 on a','two-column layout, and add','a troubleshooting slide','after slide 4”'], step:1, appear:1.5},
+    {id:'T',  x:370, y:330, w:150, h:64, shape:'rect', num:1, title:['Triage'], sub:['splits it'], step:2},
+    {id:'I1', x:590, y:220, w:200, h:64, shape:'rect', title:['Instruction 1'], sub:['relayout slide 3'], step:2},
+    {id:'I2', x:590, y:440, w:200, h:64, shape:'rect', title:['Instruction 2'], sub:['add a new slide after 4'], step:2},
+    {id:'PT', x:830, y:220, w:200, h:64, shape:'rect', num:2, title:['Planner tool'], sub:['set_slide_layout'], code:true, step:3},
+    {id:'PA', x:830, y:440, w:200, h:64, shape:'rect', num:2, title:['Planner tool'], sub:['add_deck_slides'], code:true, step:3},
+    {id:'WO', x:1075,y:330, w:210, h:84, shape:'rect', num:3, title:['Work order'], sub:['compares the plan','before vs after'], step:4},
+    ...tileNodes(TILES, 5),
+  ],
+  groups:[
+    {id:'PLAN',  x:285, y:172, w:910, h:316, label:'Understand and plan', nodes:['T','I1','I2','PT','PA','WO']},
+    {id:'RESULT',x:12,  y:550, w:1186,h:128, label:'Result for v2: only 2 of 8 slides need work; the quiz keeps its answer slide right after it', nodes:tileIds(TILES)},
+  ],
+  edges:[
+    {pts:[[260,330],[295,330]], to:'T', step:2, delay:0},
+    {pts:[[445,330],[467,330],[467,220],[490,220]], to:'I1', step:2, delay:2},
+    {pts:[[445,330],[467,330],[467,440],[490,440]], to:'I2', step:2, delay:2.6},
+    {pts:[[690,220],[730,220]], to:'PT', step:3, delay:0},
+    {pts:[[690,440],[730,440]], to:'PA', step:3, delay:1},
+    {pts:[[930,220],[950,220],[950,315],[970,315]], to:'WO', step:4, delay:0},
+    {pts:[[930,440],[950,440],[950,345],[970,345]], to:'WO', step:4, delay:0},
+    {pts:[[260,150],[1075,150],[1075,288]], to:'WO', step:4, delay:0, cls:'evidence', label:{text:['plan before (v1)'], x:660, y:142, anchor:'middle'}},
+    {pts:[[1075,372],[1075,550]], to:'R8', step:4, delay:4},
+  ],
+  status:{
+    2:[[4,'T','→ 2 instructions ✓']],
+    4:[[1.5,'WO','comparing…'],[4,'WO','2 changed, 6 kept ✓']],
+  },
+};
+
+/* ================= Turn 3: inside the designer, one slide ================= */
+const SCENE3 = {
+  viewBox:'0 -20 1200 1065',
+  steps:6,
+  final:['ST'],
+  fails:[{node:'RV',step:3,from:5.5,to:13},{node:'G1',step:4,from:6,to:12}],
+  captions:[
+    'Inside the designer: one slide, from layout to accepted',
+    'The art director picks the layout; an unchanged slide is reused',
+    'High creativity: max mode designs on the High Creativity master',
+    'Max mode renders the slide and a vision model scores it, up to 3 times',
+    'Low or Medium: Tier 1 writes code, the gate checks it, up to 3 tries',
+    'Still failing: Tier 2 fills a layout plan, Tier 3 renders without AI',
+    'Accepted slides are stitched into one Rockwell deck',
+  ],
+  nodes:[
+    {id:'AD', x:600, y:70,  w:340, h:76, shape:'rect', num:1, title:['Art director'], sub:['one call for the whole deck:','a real template layout per slide'], step:1},
+    {id:'CA', x:600, y:205, w:230, h:104,shape:'diamond', cls:'ask', title:['♻️ Unchanged?'], sub:['content + design key'], step:1},
+    {id:'HI', x:600, y:335, w:230, h:104,shape:'diamond', cls:'ask', title:['Creativity High?'], sub:['and the renderer is on'], step:2},
+    {id:'MX', x:870, y:470, w:320, h:92, shape:'rect', num:2, title:['⭐ Max mode'], sub:['High Creativity master','Title Slide or Blank','code → guard → gate'], step:2},
+    {id:'RV', x:870, y:615, w:230, h:124,shape:'diamond', cls:'gate', title:['👁️ Visual review'], sub:['render → score /10'], step:3},
+    {id:'T1', x:330, y:470, w:300, h:80, shape:'rect', num:3, title:['Tier 1 · Creative'], sub:['DeckBuilder code, guard-checked,','run in a sandbox'], step:4},
+    {id:'G1', x:330, y:605, w:210, h:110,shape:'diamond', cls:'gate', title:['🛡️ Gate'], sub:['15 checks'], step:4},
+    {id:'T2', x:330, y:735, w:300, h:72, shape:'rect', num:4, title:['Tier 2 · Fitted'], sub:['AI fills a layout plan;','code builds it'], step:5},
+    {id:'G2', x:330, y:860, w:210, h:110,shape:'diamond', cls:'gate', title:['🛡️ Gate'], sub:['15 checks'], step:5},
+    {id:'T3', x:330, y:985, w:300, h:72, shape:'rect', num:5, title:['Tier 3 · Safe'], sub:['rule-based render','on the layout, no AI'], step:5},
+    {id:'OK', x:870, y:860, w:240, h:60, shape:'rect', num:6, title:['Slide accepted'], sub:['one .pptx per slide'], step:6},
+    {id:'ST', x:870, y:985, w:320, h:64, shape:'pill', title:['🧵 Stitch → one deck'], sub:['on the Rockwell template'], step:6},
+  ],
+  groups:[
+    {id:'PICK',   x:370, y:-14, w:460, h:404, label:'Pick the layout once; skip what has not changed', nodes:['AD','CA','HI']},
+    {id:'MAX',    x:680, y:392, w:410, h:310, label:'Max mode: High creativity only', align:'end', nodes:['MX','RV']},
+    {id:'LADDER', x:8,   y:392, w:612, h:640, label:'The 3-tier ladder', nodes:['T1','G1','T2','G2','T3']},
+  ],
+  edges:[
+    {pts:[[600,108],[600,151]], to:'CA', step:1, delay:2},
+    {pts:[[715,205],[1185,205],[1185,985],[1032,985]], to:'ST', step:1, delay:6, cls:'pass', label:{text:['unchanged → reuse the cached file'], x:950, y:197, anchor:'middle', bg:true}},
+    {pts:[[600,257],[600,281]], to:'HI', step:2, delay:0, label:{text:['changed'], x:612, y:274, anchor:'start'}},
+    {pts:[[715,335],[870,335],[870,422]], to:'MX', step:2, delay:3, label:{text:['High'], x:790, y:327, anchor:'middle'}},
+    {pts:[[870,516],[870,551]], to:'RV', step:3, delay:0},
+    {pts:[[985,615],[1060,615],[1060,470],[1032,470]], to:'MX', step:3, delay:6, until:13, cls:'fail', label:{text:['redo:','critique +','render, ≤ 3'], x:1068, y:530, anchor:'start'}},
+    {pts:[[870,677],[870,828]], to:'OK', step:3, delay:14, cls:'pass', label:{text:['score ≥ 9 ships,','else the best of 3'], x:882, y:740, anchor:'start'}},
+    {pts:[[485,335],[330,335],[330,428]], to:'T1', step:4, delay:0, label:{text:['Low / Medium'], x:410, y:327, anchor:'middle'}},
+    {pts:[[710,470],[482,470]], to:'T1', step:4, delay:1, cls:'fail', label:{text:['never gate-clean'], x:596, y:462, anchor:'middle', bg:true}},
+    {pts:[[330,510],[330,548]], to:'G1', step:4, delay:3},
+    {pts:[[225,605],[120,605],[120,470],[178,470]], to:'T1', step:4, delay:7, until:12, cls:'fail', label:{text:['fixes fed back','(up to 3 tries)'], x:112, y:530, anchor:'end'}},
+    {pts:[[435,605],[600,605],[600,860],[748,860]], to:'OK', step:4, delay:13, cls:'pass', label:{text:['pass'], x:520, y:597, anchor:'middle'}},
+    {pts:[[330,660],[330,697]], to:'T2', step:5, delay:0, cls:'fail', label:{text:['still failing'], x:342, y:683, anchor:'start'}},
+    {pts:[[330,771],[330,803]], to:'G2', step:5, delay:3},
+    {pts:[[435,860],[748,860]], to:'OK', step:5, delay:7, cls:'pass', label:{text:['pass'], x:520, y:852, anchor:'middle'}},
+    {pts:[[330,915],[330,947]], to:'T3', step:5, delay:11, cls:'fail', label:{text:['still failing'], x:342, y:935, anchor:'start'}},
+    {pts:[[480,985],[640,985],[640,880],[748,880]], to:'OK', step:5, delay:14},
+    {pts:[[870,890],[870,951]], to:'ST', step:6, delay:1},
+  ],
+  status:{
+    1:[[1,'AD','choosing one layout per slide…'],[4,'CA','checking…'],[7,'CA','unchanged → no AI call'],[12,'CA','changed → design it']],
+    2:[[1,'HI','resolved: High'],[5,'MX','brand colours + Barlow forced'],[9,'MX','sample title stripped ✓'],[13,'MX','code → guard → gate ✓']],
+    3:[[1,'RV','rendering…'],[3.5,'RV','vision model judging…'],[5.5,'RV','7/10: too dense ✕'],[7,'MX','redo with critique + render…'],[13,'RV','9/10 ✓'],[15,'RV','pass: ship it']],
+    4:[[1,'T1','writing DeckBuilder code…'],[3,'T1','guard: brand rules ✓'],[5,'G1','checking 1–15…'],[6,'G1','check 10 failed ✕'],[8,'T1','attempt 2 of 3…'],[12,'G1','15 of 15 passed ✓']],
+    5:[[1,'T2','filling a layout plan…'],[5,'G2','checking 1–15…'],[7,'G2','15 of 15 passed ✓'],[12.5,'T3','always succeeds ✓']],
+    6:[[1,'OK','gate-clean ✓'],[4,'ST','slides merged in order'],[8,'ST','High master kept on brand ✓']],
+  },
+};
+const SCENES=[SCENE1,SCENE2,SCENE3];
+
+/* Play order: turn 1 boxes, turn 1 overview, turn 2 boxes, turn 2 overview, repeat */
+const SEQ=[];
+SCENES.forEach((sc,s)=>{ for(let i=1;i<=sc.steps;i++) SEQ.push([s,i]); SEQ.push([s,0]); });
+
+/* ===== Rendering ===== */
+const NS='http://www.w3.org/2000/svg', svg=document.getElementById('diagram');
+const el=(tag,a={},p)=>{const n=document.createElementNS(NS,tag);for(const k in a)n.setAttribute(k,a[k]);if(p)p.appendChild(n);return n;};
+
+function roundedPath(pts,r=12){
+  let d=`M${pts[0][0]},${pts[0][1]}`;
+  for(let i=1;i<pts.length-1;i++){
+    const [x0,y0]=pts[i-1],[x1,y1]=pts[i],[x2,y2]=pts[i+1];
+    const l1=Math.hypot(x1-x0,y1-y0),l2=Math.hypot(x2-x1,y2-y1),rr=Math.min(r,l1/2,l2/2);
+    d+=` L${x1-(x1-x0)/l1*rr},${y1-(y1-y0)/l1*rr} Q${x1},${y1} ${x1+(x2-x1)/l2*rr},${y1+(y2-y1)/l2*rr}`;
+  }
+  const l=pts[pts.length-1]; return d+` L${l[0]},${l[1]}`;
+}
+function shapeFor(n,g,cls){
+  const L=n.x-n.w/2,T=n.y-n.h/2;
+  if(n.shape==='diamond') return el('polygon',{class:cls,points:`${n.x},${T} ${L+n.w},${n.y} ${n.x},${T+n.h} ${L},${n.y}`},g);
+  if(n.shape==='cyl'){
+    const ry=9;
+    el('path',{class:cls,d:`M${L},${T+ry} A${n.w/2},${ry} 0 0 1 ${L+n.w},${T+ry} V${T+n.h-ry} A${n.w/2},${ry} 0 0 1 ${L},${T+n.h-ry} Z`},g);
+    if(cls==='shape') el('path',{class:'shape',d:`M${L},${T+ry} A${n.w/2},${ry} 0 0 0 ${L+n.w},${T+ry}`,style:'fill:none'},g);
+    return;
+  }
+  return el('rect',{class:cls,x:L,y:T,width:n.w,height:n.h,rx:n.shape==='pill'?n.h/2:10},g);
+}
+
+const COLORS={ink:'#8795A3',teal:'#13707A',amber:'#B7790C',red:'#B23A30',green:'#2C7A4B'};
+let SC, sceneIdx=-1, nodeEls={}, statusEls={}, groupEls={}, edgeEls=[], tokenLayer, tokenPool=[];
+
+function buildScene(s){
+  sceneIdx=s; SC=SCENES[s];
+  svg.innerHTML=''; svg.setAttribute('viewBox',SC.viewBox);
+  nodeEls={}; statusEls={}; groupEls={}; edgeEls=[]; tokenPool=[];
+  svg.classList.remove('enter'); void svg.getBoundingClientRect(); svg.classList.add('enter');
+
+  const defs=el('defs',{},svg);
+  for(const [k,c] of Object.entries(COLORS)){
+    const m=el('marker',{id:'arr-'+k,viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto-start-reverse'},defs);
+    el('path',{d:'M0,0 L10,5 L0,10 z',fill:c},m);
+  }
+  const gG=el('g',{},svg), gE=el('g',{},svg); tokenLayer=el('g',{},svg); const gL=el('g',{},svg), gN=el('g',{},svg);
+
+  SC.groups.forEach(gr=>{
+    const g=el('g',{class:'grp '+(gr.cls||'')},gG);
+    el('rect',{x:gr.x,y:gr.y,width:gr.w,height:gr.h,rx:14},g);
+    el('text',{x:gr.align==='end'?gr.x+gr.w-14:gr.x+16,y:gr.y+22,'text-anchor':gr.align==='end'?'end':'start'},g).textContent=gr.label;
+    groupEls[gr.id]=g;
+  });
+
+  SC.edges.forEach(e=>{
+    const g=el('g',{class:'edge '+(e.cls||'')},gE);
+    const path=el('path',{d:roundedPath(e.pts)},g);
+    let lg=null;
+    if(e.label){
+      lg=el('g',{class:'edge '+(e.cls||'')},gL);
+      if(e.label.bg){const w=e.label.text[0].length*6.6+14; el('rect',{class:'lbl-bg',x:e.label.x-w/2,y:e.label.y-13,width:w,height:18,rx:4},lg);}
+      e.label.text.forEach((t,i)=>el('text',{x:e.label.x,y:e.label.y+i*15,'text-anchor':e.label.anchor},lg).textContent=t);
+    }
+    edgeEls.push({g,lg,path,e,len:path.getTotalLength()});
+  });
+
+  SC.nodes.forEach(n=>{
+    const g=el('g',{class:'node '+(n.cls||''),tabindex:0,role:'button','aria-label':n.title.join(' ')},gN);
+    shapeFor(n,g,'halo'); shapeFor(n,g,'shape');
+    const lines=[...n.title.map(t=>({t,c:'t',h:19})),...n.sub.map(t=>({t,c:'s'+(n.code?' code':''),h:16}))];
+    let y=n.y-lines.reduce((a,l)=>a+l.h,0)/2+13;
+    const subs=[];
+    lines.forEach(l=>{const t=el('text',{class:l.c,x:n.x,y,'text-anchor':'middle'},g);t.textContent=l.t;if(l.c.startsWith('s'))subs.push(t);y+=l.h;});
+    statusEls[n.id]=subs[subs.length-1];
+    if(n.num){const b=el('g',{class:'badge'},g);el('circle',{cx:n.x-n.w/2+2,cy:n.y-n.h/2+2,r:13},b);el('text',{x:n.x-n.w/2+2,y:n.y-n.h/2+6.5,'text-anchor':'middle'},b).textContent=n.num;}
+    const go=()=>goto(SEQ.findIndex(([s,i])=>s===sceneIdx&&i===n.step));
+    g.addEventListener('click',go);
+    g.addEventListener('keydown',ev=>{if(ev.key==='Enter')go();});
+    nodeEls[n.id]=g;
+  });
+}
+function resetStatus(){ SC.nodes.forEach(n=>{ if(statusEls[n.id]) statusEls[n.id].textContent=n.sub[n.sub.length-1]; }); }
+
+/* ===== Playback ===== */
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let seqIdx=0, current=1, stepStart=performance.now(), playing=true, pausedAt=0, appliedStatus=-1;
+const dotsEl=document.getElementById('dots');
+
+function goto(idx){
+  seqIdx=((idx%SEQ.length)+SEQ.length)%SEQ.length;
+  const [s,i]=SEQ[seqIdx];
+  if(s!==sceneIdx){
+    buildScene(s);
+    SCENES.forEach((_,k)=>document.getElementById('tab'+k).setAttribute('aria-selected',k===s));
+    dotsEl.innerHTML=''; for(let k=1;k<=SC.steps;k++) dotsEl.appendChild(document.createElement('i'));
+  }
+  current=i; stepStart=performance.now(); pausedAt=0; appliedStatus=-1;
+  if(!playing) pausedAt=0;
+  resetStatus();
+  const num=document.getElementById('capNum'), txt=document.getElementById('capTxt');
+  num.textContent=current===0?'All':current; num.classList.toggle('all',current===0);
+  txt.textContent=SC.captions[current]; txt.classList.remove('swap'); void txt.offsetWidth; txt.classList.add('swap');
+  [...dotsEl.children].forEach((d,k)=>{d.className=k+1===current?'on':(current===0||k+1<current?'past':'');});
+  render(0);
+}
+
+function render(sec){
+  const all=current===0;
+  edgeEls.forEach(o=>{
+    const e=o.e; let s;
+    if(all) s='is-active';
+    else if(e.step===current) s = sec>=e.delay ? 'is-active' : 'is-todo';
+    else s = e.step<current ? 'is-done' : 'is-todo';
+    if(s==='is-active' && e.until && !all && sec>e.until) s='is-done';
+    [o.g,o.lg].forEach(g=>{ if(!g) return; g.classList.remove('is-active','is-done','is-todo'); g.classList.add(s); });
+    const col = s==='is-todo' ? 'ink' : e.cls==='evidence'?'amber':e.cls==='fail'?'red':e.cls==='pass'?'green':(s==='is-active'?'teal':'ink');
+    o.path.setAttribute('marker-end',`url(#arr-${col})`);
+    o.state=s; o.color=COLORS[col==='ink'?'teal':col];
+  });
+  SC.nodes.forEach(n=>{
+    const g=nodeEls[n.id]; let s;
+    if(all) s = SC.final.includes(n.id) ? 'is-active' : 'is-done';
+    else if(n.step===current){
+      let t=0;
+      if(n.appear!=null) t=n.appear;
+      else { const inc=SC.edges.filter(e=>e.to===n.id && e.step===current); if(inc.length) t=Math.min(...inc.map(e=>e.delay))+1; }
+      s = sec>=t ? 'is-active' : 'is-todo';
+    } else s = n.step<current ? 'is-done' : 'is-todo';
+    g.classList.remove('is-active','is-done','is-todo'); g.classList.add(s);
+    const fw=(SC.fails||[]).filter(f=>f.node===n.id);
+    if(fw.length) g.classList.toggle('failing', fw.some(f=>current===f.step && sec>=f.from && sec<f.to));
+    else if(SC.failWindow && n.id==='G') g.classList.toggle('failing', current===SC.failStep && sec>=SC.failWindow[0] && sec<SC.failWindow[1]);
+  });
+  SC.groups.forEach(gr=>{
+    const g=groupEls[gr.id]; g.classList.remove('is-active','is-todo');
+    if(all) return;
+    if(gr.nodes.some(id=>nodeEls[id].classList.contains('is-active'))) g.classList.add('is-active');
+    else if(gr.nodes.every(id=>SC.nodes.find(n=>n.id===id).step>current)) g.classList.add('is-todo');
+  });
+  const list=SC.status[current]||[];
+  let idx=-1; list.forEach((s,k)=>{if(sec>=s[0]) idx=k;});
+  if(idx!==appliedStatus){ resetStatus(); for(let k=0;k<=idx;k++) statusEls[list[k][1]].textContent=list[k][2]; appliedStatus=idx; }
+  drawTokens(sec);
+}
+
+function drawTokens(sec){
+  let used=0;
+  if(!reduced){
+    edgeEls.forEach(o=>{
+      if(o.state!=='is-active') return;
+      const travel=(sec-(current===0?0:o.e.delay))*TOKEN_SPEED, spacing=70;
+      for(let d=travel%spacing; d<=Math.min(travel,o.len); d+=spacing){
+        let c=tokenPool[used];
+        if(!c){c=el('circle',{class:'token',r:4.5},tokenLayer);tokenPool.push(c);}
+        const p=o.path.getPointAtLength(d);
+        c.setAttribute('cx',p.x); c.setAttribute('cy',p.y); c.setAttribute('fill',o.color);
+        c.setAttribute('opacity',Math.max(0,Math.min(1,(o.len-d)/30,d/15+0.2)).toFixed(2)); c.style.display='';
+        used++;
+      }
+    });
+  }
+  for(let k=used;k<tokenPool.length;k++) tokenPool[k].style.display='none';
+}
+
+function loop(now){
+  if(playing){
+    const sec=(now-stepStart)/1000;
+    const dur=(current===0?OVERVIEW_MS:STEP_MS)/1000;
+    if(sec>=dur) goto(seqIdx+1); else render(sec);
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ===== Controls ===== */
+const playBtn=document.getElementById('play');
+function togglePlay(){
+  playing=!playing;
+  if(playing) stepStart=performance.now()-pausedAt*1000;
+  else pausedAt=(performance.now()-stepStart)/1000;
+  playBtn.textContent=playing?'❚❚':'▶'; playBtn.setAttribute('aria-label',playing?'Pause':'Play');
+}
+playBtn.addEventListener('click',togglePlay);
+document.getElementById('next').addEventListener('click',()=>goto(seqIdx+1));
+document.getElementById('prev').addEventListener('click',()=>goto(seqIdx-1));
+SCENES.forEach((_,s)=>document.getElementById('tab'+s).addEventListener('click',()=>goto(SEQ.findIndex(([a,i])=>a===s&&i===1))));
+document.addEventListener('keydown',ev=>{
+  if(ev.key==='ArrowRight'||ev.key==='PageDown') goto(seqIdx+1);
+  else if(ev.key==='ArrowLeft'||ev.key==='PageUp') goto(seqIdx-1);
+  else if(ev.key===' '){ev.preventDefault();togglePlay();}
+  else if(/^[1-9]$/.test(ev.key) && +ev.key<=SCENES.length) goto(SEQ.findIndex(([a,i])=>a===+ev.key-1&&i===1));
+  else if(ev.key==='f'||ev.key==='F'){ document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen?.(); }
+});
+
+goto(0); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+# --- Secrets: never commit ---------------------------------------------------
+*.env
+!*.env.example
+keys.json
+app/config/private
+app/config/public
+*.pem
+!app/config/GenAI-api-q.rockwell.pem
+*.key
+
+# --- Local runtime artifacts -------------------------------------------------
+.local_storage/
+*.pptx
+
+# --- Python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.github/skills
+
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+certs/
+*.env
+config/keys.json
+
+# Keys
+private
+public
+
+# Data files
+*.csv
+*.xlsx
+
+docs/*
+data/
+
+# dont ignore html diagrams
+!docs/**/*.html
+
+# The design record for this branch: the spec every implementation task argues from,
+# and the plan that argues it. `!superpowers/` alone cannot work — git does not descend
+# into an excluded directory, so the directory itself has to be re-included first.
+!docs/superpowers/
+!docs/superpowers/**
+
+# The one brand template. Every slide, the stitched deck and every offline test read it,
+# so it has to be in the repo rather than beside it. The five .potx brand templates are
+# already tracked; this is the same kind of asset.
+!company-ppt-templet/SAMPLE.pptx
+graphify-out/

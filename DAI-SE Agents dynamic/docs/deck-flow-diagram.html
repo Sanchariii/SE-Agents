@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SE-Agent deck flow: questionnaire, planning, quiz answer slides, family layouts</title>
+<style>
+  :root {
+    --router: #003E7E; --handler: #5A2D82; --genai: #CD163F; --storage: #2E7D32;
+    --code: #F58024; --ink: #1B2A4A; --muted: #5A6470; --line: #9AA3AD; --bg: #F6F7F8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 "Segoe UI", Barlow, Arial, sans-serif; color: var(--ink);
+         background: #fff; }
+  header { background: var(--ink); color: #fff; padding: 18px 28px; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: #cfd6de; }
+  nav { padding: 10px 28px; background: var(--bg); border-bottom: 1px solid #e3e6ea;
+        position: sticky; top: 0; z-index: 2; }
+  nav a { margin-right: 18px; color: var(--router); text-decoration: none; font-weight: 600; }
+  main { padding: 8px 28px 40px; max-width: 1400px; }
+  section { margin: 28px 0 8px; }
+  h2 { font-size: 18px; border-left: 5px solid var(--genai); padding-left: 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  svg { width: 100%; height: auto; background: #fff; border: 1px solid #e3e6ea; border-radius: 8px; }
+  svg text { font-family: "Segoe UI", Barlow, Arial, sans-serif; }
+  .note { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 13px; }
+  th, td { border: 1px solid #dfe3e7; padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--bg); }
+  .yes { color: var(--storage); font-weight: 600; }
+  .no { color: var(--genai); font-weight: 600; }
+  code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SE-Agent deck flow</h1>
+  <p>One user turn end to end: typed questions and style sliders, planning with slide types,
+     quiz answer slides, deck-level Quiz/FAQ layouts, and where every parameter lives.</p>
+</header>
+<nav>
+  <a href="#e2e">1. End-to-end turn</a>
+  <a href="#questionnaire">2. Questionnaire</a>
+  <a href="#quiz">3. Quiz pair lifecycle</a>
+  <a href="#family">4. Family layouts</a>
+  <a href="#data">5. Data &amp; privacy</a>
+  <a href="#maxmode">6. Max mode</a>
+</nav>
+<main>
+
+<div class="legend">
+  <span><i style="background:var(--router)"></i>API / router</span>
+  <span><i style="background:var(--handler)"></i>Handler / supervisor</span>
+  <span><i style="background:var(--genai)"></i>Agent (model call)</span>
+  <span><i style="background:var(--code)"></i>Deterministic code (no model)</span>
+  <span><i style="background:var(--storage)"></i>Storage (Redis / Postgres / Blob)</span>
+  <span><i style="background:#fff;border:2px dashed var(--line)"></i>SSE event to the UI</span>
+</div>
+
+<!-- ========================================================================== -->
+<section id="e2e">
+<h2>1. End-to-end request flow</h2>
+<svg viewBox="0 0 1340 760" role="img" aria-label="End-to-end request flow">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5A6470"/></marker>
+  </defs>
+  <style>
+    .b rect { rx: 8; ry: 8; }
+    .t { fill: #fff; font-size: 13px; font-weight: 600; }
+    .s { fill: #fff; font-size: 11px; }
+    .e rect { fill: #fff; stroke: #9AA3AD; stroke-dasharray: 5 4; rx: 6; }
+    .et { fill: #1B2A4A; font-size: 11px; }
+    .l { stroke: #5A6470; stroke-width: 1.6; fill: none; marker-end: url(#a); }
+    .lab { fill: #5A6470; font-size: 11px; }
+  </style>
+
+  <!-- UI and router -->
+  <g class="b"><rect x="20" y="20" width="200" height="64" fill="#1B2A4A"/>
+    <text class="t" x="34" y="44">UI</text>
+    <text class="s" x="34" y="64">message and/or answers {id: value}</text></g>
+  <g class="b"><rect x="270" y="20" width="230" height="64" fill="var(--router)"/>
+    <text class="t" x="284" y="44">POST /decks/{id}/invoke</text>
+    <text class="s" x="284" y="62">validate_answers → 400 on bad id/value</text>
+    <text class="s" x="284" y="76">answers-only → describe_answers()</text></g>
+  <g class="b"><rect x="550" y="20" width="230" height="64" fill="var(--handler)"/>
+    <text class="t" x="564" y="44">run_supervisor.start</text>
+    <text class="s" x="564" y="64">one run per session · lease</text></g>
+  <g class="b"><rect x="830" y="20" width="230" height="64" fill="var(--handler)"/>
+    <text class="t" x="844" y="44">run_deck_flow → run_workflow</text>
+    <text class="s" x="844" y="64">state: answers, answers_only</text></g>
+  <path class="l" d="M220,52 H268"/><path class="l" d="M500,52 H548"/><path class="l" d="M780,52 H828"/>
+
+  <!-- triage -->
+  <g class="b"><rect x="830" y="130" width="300" height="96" fill="var(--genai)"/>
+    <text class="t" x="844" y="154">triage</text>
+    <text class="s" x="844" y="172">model reads turn (skipped for answers-only)</text>
+    <text class="s" x="844" y="188">brief.merge(brief_update) → apply_answers()</text>
+    <text class="s" x="844" y="204">_style_change(before, after)</text>
+    <text class="s" x="844" y="220">placement → ceiling check → plan_rules.apply</text>
+    <text class="s" x="1000" y="154">"inconsistent" → plan_tools</text></g>
+  <path class="l" d="M945,84 V128"/>
+
+  <!-- routes from triage -->
+  <g class="b"><rect x="20" y="290" width="200" height="70" fill="var(--code)"/>
+    <text class="t" x="34" y="314">clarify → END</text>
+    <text class="s" x="34" y="332">QuestionBook.build()</text>
+    <text class="s" x="34" y="348">creativity + size sliders</text></g>
+  <g class="e"><rect x="20" y="380" width="200" height="44"/>
+    <text class="et" x="32" y="400">event: questions</text>
+    <text class="et" x="32" y="416">done.result.questions / style</text></g>
+
+  <g class="b"><rect x="250" y="290" width="200" height="84" fill="var(--code)"/>
+    <text class="t" x="264" y="314">restyle</text>
+    <text class="s" x="264" y="332">draft plan → show review again</text>
+    <text class="s" x="264" y="348">built deck → work order ops</text>
+    <text class="s" x="264" y="364">consistency fix → relayout only</text></g>
+
+  <g class="b"><rect x="480" y="290" width="160" height="70" fill="var(--code)"/>
+    <text class="t" x="494" y="314">approve</text>
+    <text class="s" x="494" y="332">/approve-plan</text>
+    <text class="s" x="494" y="348">confirm → create all</text></g>
+
+  <g class="b"><rect x="670" y="290" width="200" height="70" fill="var(--handler)"/>
+    <text class="t" x="684" y="314">extraction</text>
+    <text class="s" x="684" y="332">wait for ingestion</text></g>
+
+  <g class="b"><rect x="1000" y="290" width="150" height="70" fill="var(--code)"/>
+    <text class="t" x="1014" y="314">chat → END</text>
+    <text class="s" x="1014" y="332">reply only</text></g>
+
+  <path class="l" d="M900,226 C700,250 200,250 120,288"/>
+  <path class="l" d="M920,226 C800,255 400,255 350,288"/>
+  <path class="l" d="M940,226 C900,258 600,258 560,288"/>
+  <path class="l" d="M960,226 C960,260 780,260 770,288"/>
+  <path class="l" d="M1000,226 C1040,250 1075,260 1075,288"/>
+  <text class="lab" x="140" y="270">missing brief · new deck/resize · &gt; 50</text>
+  <text class="lab" x="420" y="246">style-only change / consistency fix</text>
+  <text class="lab" x="1010" y="252">small talk · &gt; 50 on a plan</text>
+
+  <!-- planning -->
+  <g class="b"><rect x="670" y="400" width="260" height="120" fill="var(--genai)"/>
+    <text class="t" x="684" y="424">planning (tool-calling planner)</text>
+    <text class="s" x="684" y="442">slide_type · MESSAGE / DENSITY lines</text>
+    <text class="s" x="684" y="458">user_instructions · family_styles</text>
+    <text class="s" x="684" y="474">principles · layout menu · slide count</text>
+    <text class="s" x="684" y="490">then plan_rules.apply → derive_work_order</text>
+    <text class="s" x="684" y="506">ceiling 100: build / revise / insert</text></g>
+  <path class="l" d="M770,360 V398"/>
+  <g class="e"><rect x="960" y="400" width="210" height="56"/>
+    <text class="et" x="972" y="420">reply: plan review</text>
+    <text class="et" x="972" y="436">[Quiz] [Quiz answer] [FAQ]</text>
+    <text class="et" x="972" y="450">style + answer placement</text></g>
+  <path class="l" d="M930,430 H958"/>
+  <text class="lab" x="940" y="476">await_approval → END</text>
+
+  <!-- slides -->
+  <g class="b"><rect x="250" y="540" width="300" height="104" fill="var(--genai)"/>
+    <text class="t" x="264" y="564">slides (content agent per slide, parallel)</text>
+    <text class="s" x="264" y="582">QUIZ → write_content(quiz) · answer in notes</text>
+    <text class="s" x="264" y="598">FAQ → write_content(faq) · copy principles</text>
+    <text class="s" x="264" y="614">0-3 image_candidates (content slides / asked)</text>
+    <text class="s" x="264" y="630">answer slides skipped · _assign_images 1/deck</text></g>
+  <path class="l" d="M350,374 V420 C350,480 380,500 400,538"/>
+  <path class="l" d="M560,360 V440 C560,500 480,510 460,538"/>
+  <path class="l" d="M760,520 C700,540 600,560 552,575"/>
+
+  <!-- collect -->
+  <g class="b"><rect x="600" y="560" width="330" height="120" fill="var(--code)"/>
+    <text class="t" x="614" y="584">collect</text>
+    <text class="s" x="614" y="602">answer draft = question draft + reveal</text>
+    <text class="s" x="614" y="618">"Question n of N" · faq_start numbering</text>
+    <text class="s" x="614" y="634">contract (layout hints) → pass 1: no answers</text>
+    <text class="s" x="614" y="650">pass 2: build_answer_slide (re-run, reveal)</text>
+    <text class="s" x="614" y="666">HIGH slide → max mode first (section 6)</text></g>
+  <path class="l" d="M550,590 H598"/>
+
+  <!-- publish -->
+  <g class="b"><rect x="980" y="580" width="180" height="64" fill="var(--storage)"/>
+    <text class="t" x="994" y="604">publish</text>
+    <text class="s" x="994" y="622">stitch → Blob → version</text></g>
+  <path class="l" d="M930,612 H978"/>
+  <g class="e"><rect x="1190" y="580" width="130" height="64"/>
+    <text class="et" x="1200" y="600">event: done</text>
+    <text class="et" x="1200" y="616">result.style</text>
+    <text class="et" x="1200" y="632">deck_updated</text></g>
+  <path class="l" d="M1160,612 H1188"/>
+
+  <!-- storage strip -->
+  <g class="b"><rect x="20" y="690" width="1300" height="50" fill="var(--storage)"/>
+    <text class="t" x="34" y="712">Redis (working state)</text>
+    <text class="s" x="34" y="730">brief:{sid} (levels, placement, cap, size) · plan · draft · content · deck_design:{sid} · slide_artifacts</text>
+    <text class="t" x="760" y="712">Postgres (durable)</text>
+    <text class="s" x="760" y="730">chat turns + session snapshot (incl. brief) · workflow_runs / events · versions</text></g>
+</svg>
+<p class="note">Every node runs through <code>stage_node</code> (stop/lease check, recovery events). A stopped run
+restores the pre-run snapshot, which includes the brief and the deck design.</p>
+<p class="note">Priority in every planner, writer and designer prompt: hard rules &gt; the user's instructions &gt;
+the planner's directions &gt; the design principles. In <code>collect</code>, components fit their own text, the
+gate checks rules 1-14 (overlap, overflow, empty or repeated text, repeated or distorted images) plus a clutter
+advisory, and a passing slide with advisories gets one keep-best polish pass.</p>
+</section>
+
+<!-- ========================================================================== -->
+<section id="questionnaire">
+<h2>2. Questionnaire lifecycle (asked once per session; the size again for a new deck or resize)</h2>
+<svg viewBox="0 0 1340 330" role="img" aria-label="Questionnaire lifecycle">
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5A6470"/></marker>
+  </defs>
+  <style>
+    .q rect { rx: 8; } .qt { fill:#fff; font-size:13px; font-weight:600; } .qs { fill:#fff; font-size:11px; }
+    .ql { stroke:#5A6470; stroke-width:1.6; fill:none; marker-end:url(#a2); } .qlab { fill:#5A6470; font-size:11px; }
+  </style>
+  <g class="q"><rect x="20" y="30" width="210" height="80" fill="var(--genai)"/>
+    <text class="qt" x="32" y="54">New deck request</text>
+    <text class="qs" x="32" y="72">triage + brief.missing()</text>
+    <text class="qs" x="32" y="88">goal · audience · deck_type</text>
+    <text class="qs" x="32" y="102">creativity_level · number_of_slides</text></g>
+  <g class="q"><rect x="280" y="30" width="230" height="80" fill="var(--code)"/>
+    <text class="qt" x="292" y="54">QuestionBook.build</text>
+    <text class="qs" x="292" y="72">model wording for brief items</text>
+    <text class="qs" x="292" y="88">code-built scale questions</text>
+    <text class="qs" x="292" y="102">LOW/MED/HIGH · 5-10 … 20+</text></g>
+  <g class="q"><rect x="560" y="30" width="220" height="80" fill="#fff" stroke="#9AA3AD" stroke-dasharray="5 4"/>
+    <text x="572" y="54" style="font-weight:600;font-size:13px">UI renders</text>
+    <text x="572" y="72" style="font-size:11px">a slider per scale id</text>
+    <text x="572" y="88" style="font-size:11px">chips / inputs for the rest</text></g>
+  <g class="q"><rect x="830" y="30" width="230" height="80" fill="var(--router)"/>
+    <text class="qt" x="842" y="54">/invoke answers</text>
+    <text class="qs" x="842" y="72">validated (400 on bad input)</text>
+    <text class="qs" x="842" y="104">old detailing_level: accepted, ignored</text>
+    <text class="qs" x="842" y="88">answers-only → no triage model</text></g>
+  <g class="q"><rect x="1110" y="30" width="210" height="80" fill="var(--storage)"/>
+    <text class="qt" x="1122" y="54">brief saved</text>
+    <text class="qs" x="1122" y="72">Redis brief:{sid}</text>
+    <text class="qs" x="1122" y="88">Postgres session snapshot</text></g>
+  <path class="ql" d="M230,70 H278"/><path class="ql" d="M510,70 H558"/>
+  <path class="ql" d="M780,70 H828"/><path class="ql" d="M1060,70 H1108"/>
+
+  <g class="q"><rect x="20" y="190" width="300" height="90" fill="var(--code)"/>
+    <text class="qt" x="32" y="214">"you decide" / use_defaults</text>
+    <text class="qs" x="32" y="232">records MED · agent sizes the deck (≤ 35)</text>
+    <text class="qs" x="32" y="248">never asked again</text>
+    <text class="qs" x="32" y="264">"12 slides" → range 10-15, not asked</text></g>
+  <g class="q"><rect x="370" y="190" width="300" height="90" fill="var(--genai)"/>
+    <text class="qt" x="382" y="214">Later chat: "more creative", "less text"</text>
+    <text class="qs" x="382" y="232">creativity UP/DOWN · "less text" → planner</text>
+    <text class="qs" x="382" y="248">"max 8 slides" → hard cap → notes</text>
+    <text class="qs" x="382" y="264">"100 slides" → &gt; 50, refused politely</text></g>
+  <g class="q"><rect x="720" y="190" width="290" height="90" fill="var(--code)"/>
+    <text class="qt" x="732" y="214">Later slider change</text>
+    <text class="qs" x="732" y="232">answers-only invoke</text>
+    <text class="qs" x="732" y="248">_style_change → restyle route</text>
+    <text class="qs" x="732" y="264">number_of_slides → replan (not style)</text></g>
+  <g class="q"><rect x="1060" y="190" width="260" height="90" fill="var(--code)"/>
+    <text class="qt" x="1072" y="214">restyle</text>
+    <text class="qs" x="1072" y="232">creativity → redesign (cache key)</text>
+    <text class="qs" x="1072" y="248">only detailing sent → "unchanged"</text>
+    <text class="qs" x="1072" y="264">placement → add/drop answer slides</text></g>
+  <path class="ql" d="M1215,110 C1215,150 1215,160 1190,188"/>
+  <path class="ql" d="M670,235 H718"/><path class="ql" d="M1010,235 H1058"/>
+  <text class="qlab" x="1100" y="150">stored choice feeds every later turn</text>
+</svg>
+<p class="note">The deck size (<code>number_of_slides</code>) is asked for the first deck, and again in the same
+session only when triage tags a request <code>size_intent</code> <code>new_deck</code> (a new or recreated deck) or
+<code>resize</code> (the whole deck longer or shorter) and no size is named. <code>reset_size</code> forgets the old
+size and keeps the request in <code>pending_request</code>; the answering turn plans it. A resize asks only the size.
+Slide edits, adds, removals and plan feedback never ask it.</p>
+</section>
+
+<!-- ========================================================================== -->
+<section id="quiz">
+<h2>3. Quiz pair lifecycle</h2>
+<svg viewBox="0 0 1340 360" role="img" aria-label="Quiz pair lifecycle">
+  <defs>
+    <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5A6470"/></marker>
+  </defs>
+  <style>
+    .z rect { rx: 8; } .zt { fill:#fff; font-size:13px; font-weight:600; } .zs { fill:#fff; font-size:11px; }
+    .zl { stroke:#5A6470; stroke-width:1.6; fill:none; marker-end:url(#a3); } .zlab { fill:#5A6470; font-size:11px; }
+  </style>
+  <g class="z"><rect x="20" y="30" width="220" height="86" fill="var(--genai)"/>
+    <text class="zt" x="32" y="54">Planner</text>
+    <text class="zs" x="32" y="72">QUIZ slide, one question each</text>
+    <text class="zs" x="32" y="88">QUIZ: what it tests, distractors</text>
+    <text class="zs" x="32" y="104">never plans answer slides</text></g>
+  <g class="z"><rect x="290" y="30" width="250" height="86" fill="var(--code)"/>
+    <text class="zt" x="302" y="54">plan_rules</text>
+    <text class="zs" x="302" y="72">quiz_id · answer slide right after</text>
+    <text class="zs" x="302" y="88">hard cap / "notes" → none</text>
+    <text class="zs" x="302" y="104">ANSWER PLACEMENT: line</text></g>
+  <g class="z"><rect x="590" y="30" width="240" height="86" fill="var(--genai)"/>
+    <text class="zt" x="602" y="54">Content agent (question)</text>
+    <text class="zs" x="602" y="72">write_content(quiz={question,</text>
+    <text class="zs" x="602" y="88">options, correct_index, explanation})</text>
+    <text class="zs" x="602" y="104">notes += "Answer: B - ..."</text></g>
+  <g class="z"><rect x="880" y="30" width="220" height="86" fill="var(--code)"/>
+    <text class="zt" x="892" y="54">collect</text>
+    <text class="zs" x="892" y="72">counter "Question n of N"</text>
+    <text class="zs" x="892" y="88">answer draft = copy + reveal</text></g>
+  <path class="zl" d="M240,73 H288"/><path class="zl" d="M540,73 H588"/><path class="zl" d="M830,73 H878"/>
+
+  <g class="z"><rect x="20" y="180" width="300" height="100" fill="var(--genai)"/>
+    <text class="zt" x="32" y="204">Pass 1 · question (tier 1)</text>
+    <text class="zs" x="32" y="222">s.add_choice(letter, text, ..., correct=…)</text>
+    <text class="zs" x="32" y="238">gate → _check_choices(choices.json)</text>
+    <text class="zs" x="32" y="254">wrong/missing → repair attempt</text>
+    <text class="zs" x="32" y="270">ok → reveal_ready=True</text></g>
+  <g class="z"><rect x="370" y="180" width="320" height="100" fill="var(--code)"/>
+    <text class="zt" x="382" y="204">Pass 2 · build_answer_slide</text>
+    <text class="zs" x="382" y="222">re-run same program in answer sandbox</text>
+    <text class="zs" x="382" y="238">reveal_answers.flag + own frame (page no.)</text>
+    <text class="zs" x="382" y="254">correct card → green_light fill, green line</text>
+    <text class="zs" x="382" y="270">(= SAMPLE "Quiz-N-Answered")</text></g>
+  <g class="z"><rect x="740" y="180" width="280" height="100" fill="var(--code)"/>
+    <text class="zt" x="752" y="204">Fallback (question tier 2/3)</text>
+    <text class="zs" x="752" y="222">deterministic render of revealed</text>
+    <text class="zs" x="752" y="238">content on the question's layout:</text>
+    <text class="zs" x="752" y="254">question · A. B. C. · "Answer: B - …"</text></g>
+  <g class="z"><rect x="1070" y="180" width="250" height="100" fill="var(--storage)"/>
+    <text class="zt" x="1082" y="204">Cache unit</text>
+    <text class="zs" x="1082" y="222">question + answer rebuilt together</text>
+    <text class="zs" x="1082" y="238">answer op = stronger of own/question</text></g>
+  <path class="zl" d="M990,116 C990,150 200,140 170,178"/>
+  <path class="zl" d="M320,230 H368"/><path class="zl" d="M690,230 H738"/>
+  <text class="zlab" x="700" y="300">reveal re-run fails → fallback</text>
+  <text class="zlab" x="20" y="320">User removes only an answer slide → reveal_answer=false (sticky opt-out). User removes the question → its answer goes too.</text>
+  <text class="zlab" x="20" y="340">Every question's speaker notes carry the answer, whatever the placement.</text>
+</svg>
+</section>
+
+<!-- ========================================================================== -->
+<section id="family">
+<h2>4. Family layout coordination (QUIZ and FAQ)</h2>
+<svg viewBox="0 0 1340 260" role="img" aria-label="Family layout coordination">
+  <defs>
+    <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5A6470"/></marker>
+  </defs>
+  <style>
+    .f rect { rx: 8; } .ft { fill:#fff; font-size:13px; font-weight:600; } .fs { fill:#fff; font-size:11px; }
+    .fl { stroke:#5A6470; stroke-width:1.6; fill:none; marker-end:url(#a4); }
+  </style>
+  <g class="f"><rect x="20" y="30" width="250" height="96" fill="var(--code)"/>
+    <text class="ft" x="32" y="54">Generation params</text>
+    <text class="fs" x="32" y="72">slide_type from plan</text>
+    <text class="fs" x="32" y="88">levels: slide override else brief</text>
+    <text class="fs" x="32" y="104">family_styles → deck_design_context</text></g>
+  <g class="f"><rect x="320" y="30" width="300" height="96" fill="var(--genai)"/>
+    <text class="ft" x="332" y="54">Leader (first QUIZ / FAQ slide)</text>
+    <text class="fs" x="332" y="72">LOW: SAMPLE Quiz-1 / FAQ-1 reproduced</text>
+    <text class="fs" x="332" y="88">MED: SAMPLE unless custom request</text>
+    <text class="fs" x="332" y="104">HIGH / family_styles: own design</text></g>
+  <g class="f"><rect x="670" y="30" width="300" height="96" fill="var(--genai)"/>
+    <text class="ft" x="682" y="54">Followers</text>
+    <text class="fs" x="682" y="72">wait for leader (stop-aware)</text>
+    <text class="fs" x="682" y="88">same layout + exemplar program</text>
+    <text class="fs" x="682" y="104">only content changes</text></g>
+  <g class="f"><rect x="1020" y="30" width="300" height="96" fill="var(--storage)"/>
+    <text class="ft" x="1032" y="54">deck_design:{sid}</text>
+    <text class="fs" x="1032" y="72">quiz_layout · faq_layout persisted</text>
+    <text class="fs" x="1032" y="88">reused on later turns</text></g>
+  <path class="fl" d="M270,78 H318"/><path class="fl" d="M620,78 H668"/><path class="fl" d="M970,78 H1018"/>
+  <text x="20" y="170" style="font-size:12px;fill:#5A6470">NORMAL slides never wait and keep flexible layouts. "-Answered" template layouts are never a family base;
+    answer slides inherit their question's layout through the re-run, so they never lead or follow.</text>
+  <text x="20" y="194" style="font-size:12px;fill:#5A6470">A different upstream style (e.g. user asks for game-show quizzes) is applied once by fingerprint and becomes the new
+    established family layout; the agent never silently redesigns an established family.</text>
+</svg>
+</section>
+
+<!-- ========================================================================== -->
+<section id="data">
+<h2>5. Data and privacy map</h2>
+<table>
+  <tr><th>Value</th><th>Lives in</th><th>Set by</th><th>In SSE events</th><th>In plan review / reply</th><th>On slides / notes</th></tr>
+  <tr><td><code>creativity_level</code> (deck)</td><td>Brief (Redis + Postgres snapshot)</td><td>Sliders / chat / "you decide"</td><td class="yes">questions event, done.result.style</td><td class="yes">style line</td><td>—</td></tr>
+  <tr><td>Per-slide creativity override</td><td><code>SlidePlan</code></td><td>Planner <code>set_slide_style</code></td><td class="yes">tool args</td><td>—</td><td>—</td></tr>
+  <tr><td><code>user_instructions</code></td><td><code>SlidePlan</code></td><td>Planner, from the user's own words</td><td>—</td><td>—</td><td>steers the writer and the designer (above planner instructions)</td></tr>
+  <tr><td><code>quiz_answer_placement</code>, <code>max_slides</code></td><td>Brief</td><td>Chat / answers</td><td class="yes">done.result.style</td><td class="yes">quiz line</td><td>—</td></tr>
+  <tr><td><code>number_of_slides</code>, <code>slide_count</code></td><td>Brief</td><td>Size slider / a number in chat (≤ 50)</td><td class="yes">questions event, done.result.style</td><td>—</td><td>—</td></tr>
+  <tr><td><code>slide_type</code>, <code>quiz_role</code>, <code>quiz_id</code></td><td><code>SlidePlan</code></td><td>Planner + plan_rules</td><td>—</td><td class="yes">[Quiz] [Quiz answer] [FAQ]</td><td>—</td></tr>
+  <tr><td><code>planner_special_instructions</code></td><td><code>SlidePlan</code></td><td>Planner (+ placement line by plan_rules)</td><td class="no">never (redacted)</td><td class="no">never</td><td class="no">never</td></tr>
+  <tr><td><code>family_styles</code></td><td><code>DeckPlan</code></td><td>Planner, from the user's words</td><td>—</td><td>—</td><td>shapes the family layout</td></tr>
+  <tr><td>Quiz content (question, options, correct)</td><td><code>SlideDraft.quiz</code></td><td>Content agent</td><td>—</td><td>—</td><td class="yes">question + options; answer in notes and on the answer slide</td></tr>
+  <tr><td>FAQ pairs, numbering</td><td><code>SlideDraft.faq</code>, <code>faq_start</code></td><td>Content agent + collect</td><td>—</td><td>—</td><td class="yes">yes</td></tr>
+  <tr><td>Family layouts</td><td><code>deck_design:{sid}</code></td><td>PPT Creator Agent</td><td>—</td><td>—</td><td>layout only</td></tr>
+  <tr><td><code>design_revision</code>, <code>match_neighbours</code></td><td><code>SlidePlan</code></td><td>Consistency fix (<code>plan_tools</code>)</td><td>—</td><td>—</td><td>redraws the slide; content unchanged</td></tr>
+  <tr><td>Visual verdict (score, issues)</td><td>Logs only (<code>SlideBuildResult.visual_*</code>)</td><td>Max-mode judge</td><td class="yes">score + counts only</td><td>—</td><td class="no">never</td></tr>
+</table>
+</section>
+
+<!-- ========================================================================== -->
+<section id="maxmode">
+<h2>6. Max mode: render-and-review for HIGH slides</h2>
+<svg viewBox="0 0 1340 300" role="img" aria-label="Max mode ladder">
+  <defs>
+    <marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5A6470"/></marker>
+  </defs>
+  <style>
+    .m rect { rx: 8; } .mt { fill:#fff; font-size:13px; font-weight:600; } .ms { fill:#fff; font-size:11px; }
+    .ml { stroke:#5A6470; stroke-width:1.6; fill:none; marker-end:url(#a6); }
+    .mlab { fill:#5A6470; font-size:11px; }
+  </style>
+  <g class="m"><rect x="20" y="30" width="230" height="96" fill="var(--code)"/>
+    <text class="mt" x="32" y="54">eligible?</text>
+    <text class="ms" x="32" y="72">resolved creativity HIGH (checked first)</text>
+    <text class="ms" x="32" y="88">NORMAL or family leader</text>
+    <text class="ms" x="32" y="104">setting on · renderer available</text></g>
+  <g class="m"><rect x="290" y="30" width="250" height="112" fill="var(--code)"/>
+    <text class="mt" x="302" y="54">place the slide</text>
+    <text class="ms" x="302" y="72">content / takeaways / leader →</text>
+    <text class="ms" x="302" y="88">High Creativity master (title | blank)</text>
+    <text class="ms" x="302" y="104">cover / agenda / thanks keep layout</text>
+    <text class="ms" x="302" y="120">brand colours + Barlow forced; sample title stripped</text></g>
+  <g class="m"><rect x="580" y="30" width="230" height="96" fill="var(--genai)"/>
+    <text class="mt" x="592" y="54">design (Opus)</text>
+    <text class="ms" x="592" y="72">guard → run → geometry gate</text>
+    <text class="ms" x="592" y="88">failures are repair turns</text>
+    <text class="ms" x="592" y="104">≤ 6 generations · 600 s</text></g>
+  <g class="m"><rect x="850" y="30" width="200" height="96" fill="var(--code)"/>
+    <text class="mt" x="862" y="54">render</text>
+    <text class="ms" x="862" y="72">headless LibreOffice → PNG</text>
+    <text class="ms" x="862" y="88">private profile per slot</text>
+    <text class="ms" x="862" y="104">keep copy max_k_slide.pptx</text></g>
+  <g class="m"><rect x="1090" y="30" width="230" height="96" fill="var(--genai)"/>
+    <text class="mt" x="1102" y="54">judge (Sonnet, vision)</text>
+    <text class="ms" x="1102" y="72">score 1-10 + issues</text>
+    <text class="ms" x="1102" y="88">pass: ≥ 9 and no blocking/major</text>
+    <text class="ms" x="1102" y="104">≤ 3 reviews</text></g>
+  <path class="ml" d="M250,78 H288"/><path class="ml" d="M540,78 H578"/>
+  <path class="ml" d="M810,78 H848"/><path class="ml" d="M1050,78 H1088"/>
+  <path class="ml" d="M1150,126 C1100,180 760,180 700,128"/>
+  <text class="mlab" x="830" y="190">rejected → PNG + critique back to the designer</text>
+  <g class="m"><rect x="1090" y="210" width="230" height="64" fill="var(--storage)"/>
+    <text class="mt" x="1102" y="234">ship best candidate</text>
+    <text class="ms" x="1102" y="252">tier 1 · max_mode · visual_score</text></g>
+  <path class="ml" d="M1250,126 V208"/>
+  <g class="m"><rect x="580" y="210" width="380" height="64" fill="var(--code)"/>
+    <text class="mt" x="592" y="234">nothing gate-clean → today's tiers 1 → 2 → 3</text>
+    <text class="ms" x="592" y="252">re-staged on the slide's original layout</text></g>
+  <path class="ml" d="M695,126 V208"/>
+  <text class="mlab" x="20" y="170">Not eligible (LOW / MED / unset, follower, answer slide, no renderer) → today's ladder, unchanged.</text>
+  <text class="mlab" x="20" y="190">Events carry only score and issue counts, never the judge's wording.</text>
+</svg>
+<p class="note">Consistency: "slide N is inconsistent" redraws that slide (a HIGH slide in a HIGH deck stays on the
+High Creativity master and matches its neighbours' renders; the odd HIGH slide in a MED deck drops to MED). "The deck
+is inconsistent" sets the deck to MED, clears HIGH overrides and redraws every slide.</p>
+</section>
+</main>
+</body>
+</html>

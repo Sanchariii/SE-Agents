@@ -1,0 +1,627 @@
+diff --git a/app/config/constants.py b/app/config/constants.py
+index a7b02ad..2bb8bd0 100644
+--- a/app/config/constants.py
++++ b/app/config/constants.py
+@@ -1251,6 +1251,9 @@ class SkillDeckConstants:
+     LAYOUT_CHAR_EM = 0.52                   # average character width / font size
+     LAYOUT_BOLD_CHAR_EM = 0.6
+     LAYOUT_LINE_SPACING = 1.2
++    # The width estimate is an average over characters, so a line may come out up to
++    # this share longer than the box before it counts as wrapping onto a second line.
++    LAYOUT_WRAP_SLACK = 0.08
+     LAYOUT_OVERFLOW_RATIO = 1.15            # text may need up to 15% more than its box
+     LAYOUT_MAX_PROBLEMS = 25
+     LAYOUT_MIN_CARD_IN = 0.3                # thinner shapes are bars/lines, not cards
+diff --git a/app/genai/deck_polish/checks.py b/app/genai/deck_polish/checks.py
+index bdefb9e..a4a1227 100644
+--- a/app/genai/deck_polish/checks.py
++++ b/app/genai/deck_polish/checks.py
+@@ -114,7 +114,8 @@ def _content_shapes(slide):
+ 
+ 
+ def _is_background(shape, height: float) -> bool:
+-    return reader.inches(shape.height) >= height * 0.95
++    b = reader.box(shape)
++    return b[3] - b[1] >= height * 0.95
+ 
+ 
+ def _needed(shape) -> float | None:
+@@ -251,7 +252,8 @@ def _collisions(slide, number: int, height: float) -> list[Issue]:
+                 break
+     for shape in shapes:
+         needed = None if _shrinks(shape) else _needed(shape)
+-        box_h = reader.inches(shape.height)
++        b = reader.box(shape)
++        box_h = b[3] - b[1]
+         if needed and needed > box_h * SD.LAYOUT_OVERFLOW_RATIO + 0.1:
+             issues.append(Issue(number, "overflow",
+                                 f"text needs about {needed:.1f} in but its box is "
+@@ -406,14 +408,15 @@ def find_issues(prs) -> list[Issue]:
+     width, height = reader.inches(prs.slide_width), reader.inches(prs.slide_height)
+     palette = brand_palette(prs)
+     issues: list[Issue] = []
+-    for number, slide in enumerate(prs.slides, 1):
+-        issues += _labels(slide, number)
+-        issues += _numbers(slide, number)
+-        issues += _bounds(slide, number, width, height)
+-        issues += _collisions(slide, number, height)
+-        issues += _text(slide, number, palette)
+-        issues += _headings(slide, number)
+-        issues += _gaps(slide, number, height)
++    with layout_check.measuring():
++        for number, slide in enumerate(prs.slides, 1):
++            issues += _labels(slide, number)
++            issues += _numbers(slide, number)
++            issues += _bounds(slide, number, width, height)
++            issues += _collisions(slide, number, height)
++            issues += _text(slide, number, palette)
++            issues += _headings(slide, number)
++            issues += _gaps(slide, number, height)
+     return issues
+ 
+ 
+diff --git a/app/genai/deck_polish/graph.py b/app/genai/deck_polish/graph.py
+index 652ffb4..5444b4e 100644
+--- a/app/genai/deck_polish/graph.py
++++ b/app/genai/deck_polish/graph.py
+@@ -180,6 +180,7 @@ def build_graph(writer: OpsWriter | None = None,
+                    + (f", {len(state['reports'])} problem(s) need a person "
+                       "(see notes)" if state["reports"] else "") + ".")
+         step(summary)
++        log.info("%s Kept: %s", summary, "; ".join(state["changes"]) or "nothing")
+         return {"final_deck": str(out), "summary": summary}
+ 
+     graph = StateGraph(PolishState)
+diff --git a/app/genai/deck_polish/ops.py b/app/genai/deck_polish/ops.py
+index 79615ec..b15d085 100644
+--- a/app/genai/deck_polish/ops.py
++++ b/app/genai/deck_polish/ops.py
+@@ -132,6 +132,7 @@ class Deck:
+         self.prs = prs
+         self.width = reader.inches(prs.slide_width)
+         self.height = reader.inches(prs.slide_height)
++        self.text_pt: dict[int, float] = {}     # slide -> text size its groups share
+ 
+     def slide(self, number):
+         if not isinstance(number, int) or not 1 <= number <= len(self.prs.slides):
+@@ -294,6 +295,36 @@ def op_shorten(deck, op):
+             f"{new_words} words; the detail moved to the speaker notes")
+ 
+ 
++def _group_text(name: str) -> bool:
++    """True for the text box of a card, step or timeline item drawn here."""
++    return (name.startswith(C.SHAPE_PREFIX) and name.endswith("-text")
++            and name[len(C.SHAPE_PREFIX):].split("-", 1)[0] in ("card", "step", "timeline"))
++
++
++def _shared_pt(deck, slide, number: int, fitted: float) -> float:
++    """One text size for every card, step and timeline group drawn on a slide: the
++    largest size that fits all of them. A smaller size always still fits, so a group
++    drawn earlier is shrunk to match when a later one needs less."""
++    current = deck.text_pt.get(number)
++    size = fitted if current is None else min(fitted, current)
++    if current is not None and size < current:
++        for shape in slide.shapes:
++            if _group_text(shape.name):
++                for paragraph in shape.text_frame.paragraphs:
++                    for run in paragraph.runs:
++                        run.font.size = Pt(size + 2 if run.font.bold else size)
++    deck.text_pt[number] = size
++    return size
++
++
++def _next_index(slide, kind: str, number: int) -> int:
++    """The highest item number already used by ``kind`` groups on the slide, so a
++    second group on the same slide gets names of its own."""
++    pattern = re.compile(rf"^{re.escape(C.SHAPE_PREFIX)}{kind}-{number}-(\d+)$")
++    return max((int(m.group(1)) for shape in slide.shapes
++                if (m := pattern.match(shape.name))), default=0)
++
++
+ def _list_box(deck, slide, shape, op):
+     if "box" in op:
+         area = deck.box(op["box"])
+@@ -330,8 +361,10 @@ def op_to_cards(deck, op):
+                        f"{C.TEXT_LADDER[-1]} pt; give a larger box or shorten them first")
+     _remove(shape)
+     number = op["slide"]
++    body_pt = _shared_pt(deck, slide, number, body_pt)
++    offset = _next_index(slide, "card", number)
+     for index, ((left, top, width, height), title, body) in enumerate(plans, 1):
+-        name = f"{C.SHAPE_PREFIX}card-{number}-{index}"
++        name = f"{C.SHAPE_PREFIX}card-{number}-{offset + index}"
+         card = _shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, (left, top, width, height), name,
+                       fill=P["white"], line=P["border"])
+         card.adjustments[0] = 0.06
+@@ -370,6 +403,8 @@ def _steps(deck, op, timeline: bool):
+     _remove(shape)
+     number = op["slide"]
+     kind = "timeline" if timeline else "step"
++    text_pt = _shared_pt(deck, slide, number, text_pt)
++    offset = _next_index(slide, kind, number)
+     if timeline and count > 1:
+         y = top + diameter / 2
+         x1 = left + diameter / 2
+@@ -378,10 +413,10 @@ def _steps(deck, op, timeline: bool):
+                                           Inches(x2), Inches(y))
+         line.line.color.rgb = RGBColor.from_string(P["border"])
+         line.line.width = Pt(2)
+-        line.name = f"{C.SHAPE_PREFIX}{kind}-{number}-line"
++        line.name = f"{C.SHAPE_PREFIX}{kind}-{number}-line" + (f"-{offset + 1}" if offset else "")
+     for index, (title, body) in enumerate(plans, 1):
+         x = left + (index - 1) * (col_w + C.CARD_GAP_IN)
+-        name = f"{C.SHAPE_PREFIX}{kind}-{number}-{index}"
++        name = f"{C.SHAPE_PREFIX}{kind}-{number}-{offset + index}"
+         circle = _shape(slide, MSO_SHAPE.OVAL, (x, top, diameter, diameter), name,
+                         fill=P["red"])
+         circle.text_frame.text = str(index)
+diff --git a/app/genai/deck_polish/reader.py b/app/genai/deck_polish/reader.py
+index 19b1785..9bce072 100644
+--- a/app/genai/deck_polish/reader.py
++++ b/app/genai/deck_polish/reader.py
+@@ -9,6 +9,7 @@ from __future__ import annotations
+ from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
+ 
+ from app.config.constants import DeckPolishConstants as C, SkillDeckConstants as SD
++from app.genai.skill_deck import layout_check
+ 
+ EMU = 914400
+ #: Shapes stamped by the template frame or an older branding component: never content.
+@@ -27,12 +28,13 @@ def inches(emu) -> float:
+ 
+ 
+ def has_box(shape) -> bool:
+-    return shape.left is not None and shape.width is not None
++    return layout_check.geometry(shape) is not None
+ 
+ 
+ def box(shape) -> Box:
+-    left, top = inches(shape.left), inches(shape.top)
+-    return left, top, left + inches(shape.width), top + inches(shape.height)
++    left, top, width, height = layout_check.geometry(shape) or (0, 0, 0, 0)
++    left, top = inches(left), inches(top)
++    return left, top, left + inches(width), top + inches(height)
+ 
+ 
+ def overlap(a: Box, b: Box) -> float:
+@@ -160,6 +162,7 @@ def set_box(shape, left: float, top: float, width: float, height: float) -> None
+     """
+     shape.left, shape.top = int(left * EMU), int(top * EMU)
+     shape.width, shape.height = int(width * EMU), int(height * EMU)
++    layout_check.forget(shape)
+ 
+ 
+ def find_shape(slide, shape_id: int):
+diff --git a/app/genai/skill_deck/layout_check.py b/app/genai/skill_deck/layout_check.py
+index 5bbdba3..ca755e6 100644
+--- a/app/genai/skill_deck/layout_check.py
++++ b/app/genai/skill_deck/layout_check.py
+@@ -23,6 +23,8 @@ zones are this agent's own layout contract and stay out of it.
+ from __future__ import annotations
+ 
+ import math
++import threading
++from contextlib import contextmanager
+ from pathlib import Path
+ 
+ from pptx.oxml.ns import qn
+@@ -39,16 +41,218 @@ def _inches(emu: int | None) -> float:
+     return (emu or 0) / _EMU
+ 
+ 
++# --- reading a deck quickly -------------------------------------------------------- #
++# A placeholder that inherits its position looks it up in its layout every time it is
++# asked (python-pptx searches the layout's shape tree), and the checks ask thousands of
++# times per deck. Inside ``measuring()`` each shape's box and each paragraph's inherited
++# text size are worked out once. Nothing may move, resize or restyle shapes inside it.
++_local = threading.local()
++
++
++@contextmanager
++def measuring():
++    """Remember boxes and inherited text sizes while a deck is only being read."""
++    outer = getattr(_local, "cache", None)
++    if outer is None:
++        _local.cache = {}
++    try:
++        yield
++    finally:
++        if outer is None:
++            _local.cache = None
++
++
++def _memo(kind, element, compute):
++    """``compute()`` once per element inside ``measuring()``; every time outside it."""
++    cache = getattr(_local, "cache", None)
++    if cache is None:
++        return compute()
++    key = (kind, id(element))
++    hit = cache.get(key)
++    if hit is not None and hit[0] is element:      # the element itself is kept alive
++        return hit[1]
++    value = compute()
++    cache[key] = (element, value)
++    return value
++
++
++def forget(shape) -> None:
++    """Drop what ``measuring()`` remembers about a shape that was just moved or resized."""
++    cache = getattr(_local, "cache", None)
++    if cache is not None:
++        cache.pop(("geometry", id(shape._element)), None)
++
++
++def geometry(shape) -> tuple[int, int, int, int] | None:
++    """(left, top, width, height) in EMU, inherited from the layout when the shape has
++    none of its own; None for a shape without a position."""
++    def read():
++        left, width = shape.left, shape.width
++        if left is None or width is None:
++            return None
++        return left, shape.top or 0, width, shape.height or 0
++    return _memo("geometry", shape._element, read)
++
++
++# --- text settings the template gives --------------------------------------------- #
++_TITLE_PH = ("title", "ctrTitle")
++
++
++def _read_size(ppr) -> float | None:
++    """Size (pt) a paragraph-properties element sets on its default run."""
++    rpr = ppr.find(qn("a:defRPr"))
++    size = rpr.get("sz") if rpr is not None else None
++    return int(size) / 100 if size and size.isdigit() else None
++
++
++def _read_spacing(ppr) -> tuple[str, float] | None:
++    """Line spacing a paragraph-properties element sets: ("pt", 33.0) for an exact
++    height or ("x", 0.9) for a multiple of single spacing."""
++    spacing = ppr.find(qn("a:lnSpc"))
++    if spacing is None:
++        return None
++    exact, share = spacing.find(qn("a:spcPts")), spacing.find(qn("a:spcPct"))
++    if exact is not None and exact.get("val", "").isdigit():
++        return "pt", int(exact.get("val")) / 100
++    if share is not None and share.get("val", "").isdigit():
++        return "x", int(share.get("val")) / 100000
++    return None
++
++
++def _from_style(style, level: int, read):
++    """What a list style (lstStyle, titleStyle, bodyStyle...) sets for a level."""
++    if style is None:
++        return None
++    ppr = style.find(qn(f"a:lvl{min(level, 8) + 1}pPr"))
++    return read(ppr) if ppr is not None else None
++
++
++def _ph(element):
++    """The placeholder (``p:ph``) element of a shape element, or None."""
++    nv = element.find(".//" + qn("p:nvPr"))
++    return nv.find(qn("p:ph")) if nv is not None else None
++
++
++def _placeholders(owner) -> dict:
++    """A layout's or master's placeholders by ``("idx", n)`` and ``("type", t)``."""
++    def build():
++        found = {}
++        for element in owner.shapes._spTree.iterchildren():
++            ph = _ph(element)
++            if ph is None:
++                continue
++            found.setdefault(("idx", ph.get("idx", "0")), element)
++            found.setdefault(("type", ph.get("type", "obj")), element)
++        return found
++    return _memo("placeholders", owner._element, build)
++
++
++def _own(element, level: int, read):
++    body = element.find(qn("p:txBody"))
++    return _from_style(body.find(qn("a:lstStyle")), level, read) if body is not None else None
++
++
++def _layout_placeholder(shape, ph):
++    """The layout placeholder a slide placeholder inherits from, or None."""
++    try:
++        layout = shape.part.slide.slide_layout
++    except AttributeError:                        # a shape on a layout or master
++        return None, None
++    on_layout = _placeholders(layout)
++    base = on_layout.get(("idx", ph.get("idx", "0")))
++    if base is None and ph.get("type", "obj") in _TITLE_PH:
++        base = on_layout.get(("type", ph.get("type", "obj")))
++    return layout, base
++
++
++def _inherited(shape, level: int, read, kind: str):
++    """A paragraph setting from the shape's own list style, its layout placeholder, its
++    master placeholder and the master's text styles, in that order (how PowerPoint
++    resolves it); None when nothing sets it."""
++    def resolve():
++        element = shape._element
++        value = _own(element, level, read)
++        ph = _ph(element)
++        if value is not None or ph is None:
++            return value
++        ph_type = ph.get("type", "obj")
++        layout, base = _layout_placeholder(shape, ph)
++        if layout is None:
++            return None
++        if base is not None:
++            value = _own(base, level, read)
++            if value is not None:
++                return value
++            base_ph = _ph(base)
++            ph_type = base_ph.get("type", "obj") if base_ph is not None else ph_type
++        master = layout.slide_master
++        master_type = "title" if ph_type in _TITLE_PH else (
++            ph_type if ph_type in ("dt", "ftr", "sldNum") else "body")
++        on_master = _placeholders(master).get(("type", master_type))
++        if on_master is not None:
++            value = _own(on_master, level, read)
++            if value is not None:
++                return value
++        styles = master._element.find(qn("p:txStyles"))
++        if styles is None:
++            return None
++        style = ("p:titleStyle" if ph_type in _TITLE_PH
++                 else "p:bodyStyle" if master_type == "body" else "p:otherStyle")
++        return _from_style(styles.find(qn(style)), level, read)
++    return _memo((kind, level), shape._element, resolve)
++
++
++def inherited_pt(shape, level: int = 0) -> float | None:
++    """The text size (pt) a paragraph at ``level`` gets from the template."""
++    return _inherited(shape, level, _read_size, "size")
++
++
++def _line_height(shape, paragraph, size: float) -> float:
++    """Inches one line of this paragraph takes: its own line spacing, else the one the
++    template gives, else single spacing (about 1.2 x the font size)."""
++    ppr = paragraph._p.find(qn("a:pPr"))
++    spacing = (_read_spacing(ppr) if ppr is not None else None) or _inherited(
++        shape, paragraph.level, _read_spacing, "spacing")
++    if spacing and spacing[0] == "pt":
++        return spacing[1] / 72
++    share = spacing[1] if spacing else 1.0
++    return size / 72 * C.LAYOUT_LINE_SPACING * share
++
++
++def _autofit(shape) -> str | None:
++    """'normAutofit', 'spAutoFit' or 'noAutofit' from the shape, else its layout
++    placeholder (a placeholder inherits the setting); None when nothing sets it."""
++    def own(element):
++        body = element.find(qn("p:txBody"))
++        pr = body.find(qn("a:bodyPr")) if body is not None else None
++        if pr is None:
++            return None
++        for tag in ("normAutofit", "spAutoFit", "noAutofit"):
++            if pr.find(qn(f"a:{tag}")) is not None:
++                return tag
++        return None
++
++    def resolve():
++        found = own(shape._element)
++        ph = _ph(shape._element)
++        if found is not None or ph is None:
++            return found
++        _, base = _layout_placeholder(shape, ph)
++        return own(base) if base is not None else None
++    return _memo("autofit", shape._element, resolve)
++
++
+ def _is_background(shape, width: float, height: float) -> bool:
+     """Full-height panels and full-slide backgrounds may touch every edge."""
+-    return _inches(shape.height) >= height * 0.95
++    box = geometry(shape)
++    return _inches(box[3] if box else shape.height) >= height * 0.95
+ 
+ 
+ def _font_pt(paragraph, default: float) -> tuple[float, bool]:
+     """Largest run size in the paragraph (pt) and whether it is bold.
+ 
+     Programs often set the size on the paragraph (``paragraph.font.size``) instead of
+-    the runs, so that is the fallback before the default.
++    the runs, so that is the fallback before the default (the size the template gives).
+     """
+     sizes = [r.font.size.pt for r in paragraph.runs if r.font.size is not None]
+     if not sizes and paragraph.font.size is not None:
+@@ -62,16 +266,19 @@ def _needed_height(shape) -> float | None:
+     if not shape.has_text_frame or not shape.text_frame.text.strip():
+         return None
+     frame = shape.text_frame
+-    usable = _inches(shape.width) - 0.2              # default left + right inset
++    box = geometry(shape)
++    usable = _inches(box[2] if box else shape.width) - 0.2   # default left + right inset
+     if usable <= 0.2:
+         return None
+     total = 0.1                                      # default top + bottom inset
+     for paragraph in frame.paragraphs:
+-        size, bold = _font_pt(paragraph, C.LAYOUT_DEFAULT_FONT_PT)
++        template_pt = inherited_pt(shape, paragraph.level)
++        size, bold = _font_pt(paragraph, template_pt or C.LAYOUT_DEFAULT_FONT_PT)
+         text = "".join(r.text for r in paragraph.runs) or " "
+         char_w = size / 72 * (C.LAYOUT_BOLD_CHAR_EM if bold else C.LAYOUT_CHAR_EM)
+-        lines = max(1, math.ceil(len(text) * char_w / usable)) if frame.word_wrap is not False else 1
+-        total += lines * size / 72 * C.LAYOUT_LINE_SPACING
++        lines = (max(1, math.ceil(len(text) * char_w / usable - C.LAYOUT_WRAP_SLACK))
++                 if frame.word_wrap is not False else 1)
++        total += lines * _line_height(shape, paragraph, size)
+     return total
+ 
+ 
+@@ -79,8 +286,9 @@ Box = tuple[float, float, float, float]          # left, top, right, bottom (in)
+ 
+ 
+ def _box(shape) -> Box:
+-    left, top = _inches(shape.left), _inches(shape.top)
+-    return left, top, left + _inches(shape.width), top + _inches(shape.height)
++    left, top, width, height = geometry(shape) or (0, 0, 0, 0)
++    left, top = _inches(left), _inches(top)
++    return left, top, left + _inches(width), top + _inches(height)
+ 
+ 
+ def _overlap(a: Box, b: Box) -> float:
+@@ -123,7 +331,7 @@ def _text_box(shape, box: Box) -> Box | None:
+ 
+ def _collisions(slide) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+     """(card pairs that partly overlap, text pairs that run into each other)."""
+-    shapes = [s for s in slide.shapes if s.left is not None and s.width is not None
++    shapes = [s for s in slide.shapes if geometry(s) is not None
+               and not s.name.startswith(FURNITURE)]
+     boxes = {id(s): _box(s) for s in shapes}
+     cards = [s for s in shapes if _is_card(s, boxes[id(s)])]
+@@ -154,20 +362,20 @@ def _bleeds(edge: float, limit: float) -> bool:
+ 
+ 
+ def _shrinks(shape) -> bool:
+-    """True when the box is set to shrink its text on overflow (PowerPoint fits it)."""
++    """True when the box shrinks its text on overflow (PowerPoint fits it), set on the
++    shape or inherited from its layout placeholder."""
+     if not shape.has_text_frame:
+         return False
+-    body = shape.text_frame._txBody.bodyPr
+-    return body is not None and body.find(qn("a:normAutofit")) is not None
++    return _autofit(shape) == "normAutofit"
+ 
+ 
+ def _furniture_boxes(slide, width: float, height: float) -> list[tuple[str, Box]]:
+     """Logos and labels: stamped on the slide, or pictures in its layout and master."""
+     boxes = [(s.name, _box(s)) for s in slide.shapes
+-             if s.name.startswith(FURNITURE) and s.left is not None and s.width is not None]
++             if s.name.startswith(FURNITURE) and geometry(s) is not None]
+     for owner in (slide.slide_layout, slide.slide_layout.slide_master):
+         for s in owner.shapes:
+-            if (s.left is not None and s.width is not None and "PICTURE" in str(s.shape_type)
++            if (geometry(s) is not None and "PICTURE" in str(s.shape_type)
+                     and _area(_box(s)) < C.SCORE_LOGO_MAX_SHARE * width * height):
+                 boxes.append((s.name, _box(s)))
+     return boxes
+@@ -178,7 +386,7 @@ def _covering(slide, width: float, height: float) -> list[tuple[str, str]]:
+     marks = _furniture_boxes(slide, width, height)
+     pairs = []
+     for shape in slide.shapes:
+-        if (shape.left is None or shape.width is None or shape.name.startswith(FURNITURE)
++        if (geometry(shape) is None or shape.name.startswith(FURNITURE)
+                 or _is_background(shape, width, height)):
+             continue
+         box = _box(shape)
+@@ -203,6 +411,11 @@ def layout_problems(deck: Path, universal: bool = False) -> list[str]:
+     """
+     from pptx import Presentation
+     prs = Presentation(str(deck))
++    with measuring():
++        return _problems(prs, universal)
++
++
++def _problems(prs, universal: bool) -> list[str]:
+     width, height = _inches(prs.slide_width), _inches(prs.slide_height)
+     tol = C.LAYOUT_TOLERANCE_IN
+     right_limit = width - C.LAYOUT_SIDE_MARGIN_IN
+@@ -231,10 +444,9 @@ def layout_problems(deck: Path, universal: bool = False) -> list[str]:
+                               "other (long text grows its box downwards) - move the lower "
+                               "one down, shorten the text or lower the font size")
+         for shape in slide.shapes:
+-            if shape.left is None or shape.width is None or shape.name.startswith(FURNITURE):
++            if geometry(shape) is None or shape.name.startswith(FURNITURE):
+                 continue                    # logos, labels: placed by branding or template
+-            left, top = _inches(shape.left), _inches(shape.top)
+-            right, bottom = left + _inches(shape.width), top + _inches(shape.height)
++            left, top, right, bottom = _box(shape)
+             has_text = shape.has_text_frame and bool(shape.text_frame.text.strip())
+             kinds = []
+             if right > width + tol or bottom > height + tol or left < -tol or top < -tol:
+@@ -251,7 +463,7 @@ def layout_problems(deck: Path, universal: bool = False) -> list[str]:
+             for kind in kinds:
+                 found.setdefault((number, kind), []).append(f"'{shape.name}'")
+             needed = None if (universal and _shrinks(shape)) else _needed_height(shape)
+-            box_h = _inches(shape.height)
++            box_h = bottom - top
+             if needed and needed > box_h * C.LAYOUT_OVERFLOW_RATIO + 0.1:
+                 text = shape.text_frame.text.strip().replace("\n", " ")[:40]
+                 overflow.append(f"slide {number}: text '{text}...' in '{shape.name}' needs "
+diff --git a/app/genai/skill_deck/scorecard.py b/app/genai/skill_deck/scorecard.py
+index 658b92c..293625e 100644
+--- a/app/genai/skill_deck/scorecard.py
++++ b/app/genai/skill_deck/scorecard.py
+@@ -282,10 +282,11 @@ def score_deck(deck: Path, spec: dict | None = None, style_target: dict | None =
+     """
+     from pptx import Presentation
+     prs = Presentation(str(deck))
+-    areas = {"layout": _layout(prs, Path(deck)), "brand": _brand(prs),
+-             "readability": _readability(prs)}
+-    if spec and spec.get("slides"):
+-        areas["content"] = _content(prs, spec)
++    with layout_check.measuring():
++        areas = {"layout": _layout(prs, Path(deck)), "brand": _brand(prs),
++                 "readability": _readability(prs)}
++        if spec and spec.get("slides"):
++            areas["content"] = _content(prs, spec)
+     if style_target:
+         areas["style"] = _style(Path(deck), style_target)
+     for area in areas.values():
+diff --git a/tests/test_deck_polish.py b/tests/test_deck_polish.py
+index 8fafd70..2e2b729 100644
+--- a/tests/test_deck_polish.py
++++ b/tests/test_deck_polish.py
+@@ -296,6 +296,60 @@ def test_cards_pick_one_readable_size_for_the_whole_group(tmp_path):
+     assert titles == ["Prepare", "Notify", "Isolate"]
+ 
+ 
++def test_two_card_groups_on_one_slide_share_one_text_size(tmp_path):
++    prs = Presentation(str(_deck(tmp_path)))
++    slide = prs.slides[2]
++    listing = _shape(prs, 3, "Prepare")
++    listing._element.getparent().remove(listing._element)
++    _textbox(slide, ["Lock", "Tag"], 6.9, 2.2, 5.6, 3.6)
++    _textbox(slide, ["Prepare: identify every energy source, every isolating device and "
++                     "every stored hazard before anyone touches the machine",
++                     "Notify: tell every operator and every affected employee who works "
++                     "near the machine that it is about to be locked out"],
++             0.8, 2.2, 5.6, 3.6)
++    short, long = _shape(prs, 3, "Lock").shape_id, _shape(prs, 3, "Prepare").shape_id
++    applied, rejected = ops.apply(prs, [{"op": "to_cards", "slide": 3, "shape": short},
++                                        {"op": "to_cards", "slide": 3, "shape": long}],
++                                  "MED")
++    assert len(applied) == 2, rejected
++    texts = [s for s in slide.shapes if s.name.endswith("-text")]
++    body = {run.font.size.pt for s in texts for p in s.text_frame.paragraphs
++            for run in p.runs if not run.font.bold}
++    names = [s.name for s in slide.shapes if s.name.startswith(config.SHAPE_PREFIX)]
++    assert len(texts) == 4 and len(body) == 1 and body.pop() < config.TEXT_LADDER[0]
++    assert len(names) == len(set(names))
++
++
++def test_text_estimate_reads_size_and_line_spacing_from_the_template(tmp_path):
++    """A placeholder without its own size gets the template's, not a guess: the
++    timeline's 12 pt step labels fit their thin bands, the title fits its box."""
++    from app.genai.ppt.template import registry
++    from app.genai.skill_deck import layout_check
++    prs = Presentation(str(registry.template_path()))
++    layout = next(l for m in prs.slide_masters for l in m.slide_layouts
++                  if l.name == "Six-Step Gradient Timeline")
++    slide = prs.slides.add_slide(layout)
++    labels = sorted((p for p in slide.placeholders
++                     if reader.box(p)[3] - reader.box(p)[1] < 0.5
++                     and p.placeholder_format.type != 1), key=lambda p: reader.box(p)[0])
++    assert len(labels) >= 6
++    for placeholder, text in zip(labels, ["Prepare", "Notify", "Shut down",
++                                          "Isolate, lock and tag", "Release stored energy",
++                                          "Verify isolation"]):
++        placeholder.text = text
++    slide.shapes.title.text = "The Six Lockout Steps at a Glance"
++    number = len(prs.slides)
++    assert layout_check.inherited_pt(labels[4]) == 12
++    found = [i for i in checks.find_issues(prs) if i.slide == number
++             and i.code in ("overflow", "text_overlap")]
++    assert not found, [i.line() for i in found]
++    plain = layout_check._needed_height(slide.shapes.title)      # noqa: SLF001
++    with layout_check.measuring():
++        assert layout_check._needed_height(slide.shapes.title) == plain   # noqa: SLF001
++    title = reader.box(slide.shapes.title)
++    assert plain <= title[3] - title[1] + 0.02
++
++
+ # --- the setting, the scorecard and the terminal tool ---------------------------- #
+ def test_setting_switches_polish_and_picks_the_level(monkeypatch):
+     for value, on, level in (("off", False, None), ("", False, None), ("on", True, "HIGH"),

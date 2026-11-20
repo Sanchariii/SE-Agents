@@ -1,0 +1,43 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+python-dotenv>=1.0
+python-multipart
+httpx>=0.27
+APScheduler>=3.10                    # lightweight in-process jobs (abandoned-upload cleanup)
+
+# LLM / agents
+openai>=1.40
+langchain>=1.0
+langchain-core>=1.0
+langchain-openai>=1.0
+langgraph>=0.2.60
+tiktoken>=0.7
+
+# Azure
+azure-search-documents>=11.5.1
+azure-storage-blob>=12.20
+azure-identity>=1.17
+azure-keyvault-secrets>=4.7          # hosted-mode secrets; unused in local mode
+azure-ai-documentintelligence>=1.0.0
+
+# stores
+redis>=5.0
+psycopg2-binary>=2.9
+SQLAlchemy>=2.0
+
+# auth
+pyjwt[crypto]>=2.8
+
+# document extraction
+python-docx>=1.1
+pypdf>=4.2
+python-pptx>=0.6.23
+Pillow>=10.0
+openpyxl>=3.1
+
+# local media processing (see app/genai/ingestion/local/README.md)
+opencv-python-headless>=4.10
+numpy>=1.26
+faster-whisper>=1.0                  # only needed when WHISPER_BACKEND=local

@@ -1,0 +1,44 @@
+[
+ {
+  "op": "to_cards",
+  "slide": 2,
+  "shape": 2,
+  "box": [
+   0.79,
+   2.8,
+   5.42,
+   3.9
+  ]
+ },
+ {
+  "op": "to_cards",
+  "slide": 2,
+  "shape": 3,
+  "box": [
+   7.12,
+   2.8,
+   5.58,
+   3.9
+  ]
+ },
+ {
+  "op": "shorten",
+  "slide": 4,
+  "shape": 14,
+  "text": [
+   "Safe to service only after step 6"
+  ],
+  "notes": "Only after step 6 confirms the machine is dead is it safe to begin servicing."
+ },
+ {
+  "op": "to_cards",
+  "slide": 10,
+  "shape": 3,
+  "box": [
+   1.14,
+   2.15,
+   11.75,
+   4.4
+  ]
+ }
+]

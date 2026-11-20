@@ -1,0 +1,24 @@
+diff --git a/app/config/constants.py b/app/config/constants.py
+index 95ef486..a7b02ad 100644
+--- a/app/config/constants.py
++++ b/app/config/constants.py
+@@ -1210,7 +1210,8 @@ class SkillDeckConstants:
+     STYLE_SKILL_DESCRIPTION = ("The look the user picked for this deck from a reference. "
+                                "Style only: the ppt skill wins on any conflict.")
+ 
+-    MODEL = "claude-sonnet-4-6"
++    # The app's own deck-code model, so the gateway already serves it.
++    MODEL = ModelConstants.PPT_CODER
+     MAX_TOKENS = 16000
+     CODE_BLOCK_TYPE = "server_tool_use"
+     CODE_BLOCK_NAMES = ("text_editor_code_execution", "code_execution")
+@@ -1322,7 +1323,8 @@ class DeckPolishConstants:
+     PPT_SKILL_SECTIONS = ("Brand Palette", "Type Scale", "Geometry Rules",
+                           "Common Mistakes to Avoid")
+ 
+-    MODEL = "claude-sonnet-4-6"
++    # The app's own reviewing model, so the gateway already serves it.
++    MODEL = ModelConstants.CRITIC
+     MAX_TOKENS = 8000
+     WORK_DIRNAME = "polish"
+     OUTPUT_FILENAME = "deck_polished.pptx"

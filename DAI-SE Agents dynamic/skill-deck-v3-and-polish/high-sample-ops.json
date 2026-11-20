@@ -1,0 +1,57 @@
+[
+ {
+  "op": "to_cards",
+  "slide": 2,
+  "shape": 2,
+  "box": [
+   0.79,
+   2.73,
+   5.42,
+   3.9
+  ]
+ },
+ {
+  "op": "to_cards",
+  "slide": 2,
+  "shape": 3,
+  "box": [
+   7.12,
+   2.73,
+   5.58,
+   3.9
+  ]
+ },
+ {
+  "op": "font_size",
+  "slide": 7,
+  "shape": 2,
+  "pt": 22
+ },
+ {
+  "op": "font_size",
+  "slide": 7,
+  "shape": 3,
+  "pt": 22
+ },
+ {
+  "op": "to_cards",
+  "slide": 10,
+  "shape": 3,
+  "box": [
+   1.14,
+   2.0,
+   11.05,
+   4.7
+  ]
+ },
+ {
+  "op": "divider",
+  "before": 5,
+  "title": "Check your knowledge"
+ },
+ {
+  "op": "divider",
+  "before": 7,
+  "title": "Restarting safely"
+ }
+]
