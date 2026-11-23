@@ -6,21 +6,18 @@
 
 **Goal:** When a user gives a reference `.pptx` - attached to a skill, or picked with `@` in chat - the generated deck follows that reference, the content comes only from the user's source documents, and every slide stays Rockwell-compliant (logo, classification, readability). Without a reference, every deck is built exactly as today.
 
-**Approach:** No new graph node and no new pipeline. A reference is turned once, at upload, into a **reference profile** (structure and layout patterns, never text). The workflow reads the profile at the planning and design stages through the same `skill_context` block the skills plan already adds. What the profile is allowed to change depends on Decision 0.
+**Approach:** No new graph node and no new pipeline. A reference is turned once, at upload, into a **reference profile** (structure and layout patterns, never text) that guides planning, and into a **stripped, Rockwell-logo copy** of the deck that every slide is built on (Decision 0).
 
 ---
 
-## Decision 0 (needed before Phase 2): what does a reference control?
+## Decision 0: the design follows the reference (decided 23 Nov)
 
-| | **Option A - Skeleton on the Rockwell template** (recommended for v1) | **Option B - Reference look, Rockwell furniture** |
-|---|---|---|
-| What is copied | Slide sequence and roles, layout patterns (columns, cards, image position, steps), density | Everything in A **plus** the reference's own layouts, backgrounds, colours and fonts |
-| Template | `SAMPLE.pptx` (RB-TEMPLATE-01 holds) | The reference deck, slides stripped |
-| Rockwell logo / classification | From the template, as today | Forced on every layout (`reference_rebrand`, already built) |
-| Fits the skills plan | Yes - "visual properties are ignored", base rules RB-TEMPLATE/COLOR/FONT unchanged | No - needs RB-TEMPLATE/COLOR/FONT exceptions for references |
-| Effort | Medium: new profile + layout mapping | Small: built on branch `reference-design-rockwell-logo`; needs the fixes in Phase 3B |
+- **Reference given:** the deck copies the reference's design - its layouts, backgrounds, colours and fonts (Option B, built on branch `reference-design-rockwell-logo`).
+- **Reference already has Rockwell elements** (Rockwell layouts, logo, classification - e.g. the D2R decks): they are kept as they are.
+- **Reference has another company's logo or none:** the Rockwell logo is put in its place or added; the classification label is stamped on every slide.
+- **No reference:** the Rockwell template (`SAMPLE.pptx`) only, exactly as today.
 
-**Recommendation:** ship **A** in v1, as the skills plan and the brand rules require. Keep **B** in the code behind a switch that is **off** (`REFERENCE_FULL_DESIGN_ENABLED = False`), so it can be turned on later for approved internal templates (e.g. the D2R decks) without new work. Only Phase 3A *or* 3B is built, depending on this decision.
+The structure (slide order, roles, patterns) is copied in every case. Phase 3B is built; Phase 3A is not needed.
 
 ---
 
@@ -45,7 +42,6 @@
 
 ## Open questions
 
-0. Decision 0 above.
 1. Should `@` references be part of v1, or does v1 use only references attached to a skill (as in the skills plan)?
 2. `/invoke` field name for `@` references - proposed `reference_ids: [file_id]`, next to `skill_ids`.
 3. Option B only: should the deck-wide polish pass stay off for reference decks (`deck_workflow.py:1496`)?
@@ -90,7 +86,7 @@
 - [ ] `DeckPlan.skill_notes` (skills plan M2) lists what was applied from the reference, e.g. "Applied: agenda after cover, quiz every 4 slides (from reference)".
 - [ ] Test: with no reference the planner prompt is unchanged (snapshot).
 
-## Phase 3A - Option A: Rockwell layouts matching the reference
+## Phase 3A - Option A (not built - kept for reference): Rockwell layouts matching the reference
 
 ### Task 3A.1 - Map reference patterns to Rockwell layouts (`design_contract`)
 - [ ] For each planned slide, the reference pattern becomes a **layout preference** (the skills plan's `layout_preference` -> intent bias in `design_contract.build`), e.g. "3 columns" -> Rockwell three-column layout, "image right" -> image-right layout.
@@ -100,9 +96,9 @@
 - [ ] The slide's reference pattern is added to the designer's design block (`SlideCodeBrief` skill design notes, skills plan M3). `code_guard` keeps colours, fonts and logo on brand.
 - [ ] The reference's design hash joins the design key so a changed reference never reuses stale slides.
 
-## Phase 3B - Option B: build on the reference's design (only if Decision 0 = B)
+## Phase 3B - Build on the reference's design (decided)
 
-- [ ] `REFERENCE_FULL_DESIGN_ENABLED` switch; when on, the stripped and rebranded reference replaces `SAMPLE.pptx` for the deck (`registry.using_template`, already built).
+- [ ] The stripped and rebranded reference replaces `SAMPLE.pptx` for the deck (`registry.using_template`, already built); one switch `REFERENCE_FULL_DESIGN_ENABLED = True` lets it be turned off without a code change.
 - [ ] Layout usage counts from Task 1.2 feed `catalog.usage_count`, so search favours the layouts the reference uses (reference layout names such as `SSCPT0015` defeat name matching).
 - [ ] Max mode: the vision reviewer judges against the reference's look; only logo, classification and readability are fixed. Log the missing High Creativity master once per deck.
 - [ ] Base-rule registry: RB-TEMPLATE/COLOR/FONT entries note the approved-reference exception.
@@ -121,7 +117,7 @@
 ## Acceptance criteria
 
 - [ ] Slide-role order of the generated deck matches the reference's **≥ 90%** (when the user and skill set no conflicting structure).
-- [ ] Every slide passes the 15-rule geometry gate; **0** base-rule violations (Option A: no non-template fonts or colours; both: logo and classification on every slide).
+- [ ] Every slide passes the 15-rule geometry gate; the Rockwell logo and classification are on every slide; no other company's logo remains.
 - [ ] **0** canary leaks: no reference-only text in the plan, slides or notes.
 - [ ] With no reference: plan, prompts and design keys identical to today (golden comparison on 5 standard requests).
 - [ ] Full `pytest`: no failures beyond the 51 already failing on `main` (recorded 20 Nov).
@@ -132,6 +128,6 @@ Vision-model description of reference slides; more than one reference per deck; 
 
 ## Order of work
 
-1. Week of 23 Nov: Phase 1 (no dependencies) while Decision 0 and the open questions are settled.
-2. Week of 30 Nov: Phase 2 with Atharv's `skill_context`; Phase 3A or 3B.
+1. Week of 23 Nov: Phase 1 (no dependencies) while the open questions are settled.
+2. Week of 30 Nov: Phase 2 with Atharva's `skill_context`; Phase 3B.
 3. Then Phase 4, demo to Nishant, PR in Azure DevOps.
