@@ -58,6 +58,24 @@ The structure (slide order, roles, patterns) is copied in every case. Phase 3B i
 
 ---
 
+## Phase 0 - Quality baseline first (applies to every new feature)
+
+Before any code changes, record today's deck quality on `main`, so each later phase can prove it changed nothing for decks without a reference. (Nishant, 23 Nov: the goal is to add the feature without degrading existing quality; this applies to everyone working on a new feature.)
+
+### Task 0.1 - Run a fixed test set on `main` (office laptop, VPN)
+- [ ] **Deck types:** training, quiz, FAQ, job aid, overview.
+- [ ] **Creativity:** MEDIUM and HIGH for every type (LOW once, as a sanity check).
+- [ ] **Sources:** the same 2 documents every run (e.g. `PPTs/Lockout Tagout Safety Basics - Sample Source.docx` plus one longer document), same prompts, same slide-count answer.
+- [ ] Run through the live service (`scripts/manual_testing/02_deck_flow.py` style) and keep every generated `.pptx`.
+
+### Task 0.2 - Record the results in one shared sheet
+Per deck: slides asked vs made; geometry-gate pass rate; how many slides fell back to tier 2 / tier 3; HIGH only - max-mode review score and redo count; tokens and cost (analytics); build time; and a 1-5 human score on readability, layout, branding and content accuracy.
+
+### Task 0.3 - Re-run after every phase
+- [ ] The same set without a reference after each phase. **No worse than baseline:** gate pass rate equal or higher, tier-3 fallbacks at most +5 points, max-mode scores not lower, tokens and time at most +15%, human score not lower.
+- [ ] The same set with a D2R reference, scored the same way, to show the new feature's own quality.
+- [ ] Share the test set and sheet so other features (skills, `.docx`) use the same baseline.
+
 ## Phase 1 - Foundation (needed by A and B; no dependencies, start now)
 
 ### Task 1.1 - Bring the existing branch to the team's code rules
@@ -120,6 +138,7 @@ The structure (slide order, roles, patterns) is copied in every case. Phase 3B i
 - [ ] Every slide passes the 15-rule geometry gate; the Rockwell logo and classification are on every slide; no other company's logo remains.
 - [ ] **0** canary leaks: no reference-only text in the plan, slides or notes.
 - [ ] With no reference: plan, prompts and design keys identical to today (golden comparison on 5 standard requests).
+- [ ] Phase 0 test set: no metric worse than the recorded baseline.
 - [ ] Full `pytest`: no failures beyond the 51 already failing on `main` (recorded 20 Nov).
 
 ## Out of scope for v1
@@ -128,6 +147,6 @@ Vision-model description of reference slides; more than one reference per deck; 
 
 ## Order of work
 
-1. Week of 23 Nov: Phase 1 (no dependencies) while the open questions are settled.
+1. Week of 23 Nov: Phase 0 baseline first, then Phase 1 (no dependencies) while the open questions are settled.
 2. Week of 30 Nov: Phase 2 with Atharva's `skill_context`; Phase 3B.
 3. Then Phase 4, demo to Nishant, PR in Azure DevOps.
