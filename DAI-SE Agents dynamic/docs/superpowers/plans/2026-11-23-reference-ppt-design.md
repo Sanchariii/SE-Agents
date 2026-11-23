@@ -54,7 +54,7 @@ The structure (slide order, roles, patterns) is copied in every case. Phase 3B i
 |---|---|---|
 | Amal (tables, upload, UI) | `skill_files` rows (`file_id`, `sha256`, `storage_path`, `ingest_status`, `profile` jsonb) per the skills plan P2; `reference_ids` on `/invoke` | `ReferenceProfiler.profile(file)` to fill `skill_files.profile` at upload; the active reference for the UI chip |
 | Atharv (`skill_context`, router/rewriter) | A place for the reference block in the planning and design stages | Reference profile as `reference_profile` directives (strength at most `should`) |
-| Nishant | Decision 0, open questions 1-3 | Demo and side-by-sides before the PR |
+| Nishant | Open questions 1-3 | Demo and side-by-sides before the PR |
 
 ---
 
