@@ -70,17 +70,20 @@ def test_going_back_to_the_rockwell_template_is_recognised():
     assert not rd.asks_to_drop_design("Copy the design of the uploaded PPT")
 
 
-def test_the_reference_is_the_named_or_latest_uploaded_deck():
+def test_the_reference_is_the_deck_named_in_the_message_else_the_latest():
     def doc(name, at, status="ready", latest=True):
         return SimpleNamespace(filename=name, uploaded_at=at, version=1, status=status,
                                is_latest=latest)
     manual = doc("Manual.pdf", "2026-11-19T10:00")
-    older = doc("Team deck.pptx", "2026-11-19T09:00")
-    newer = doc("Roadmap.pptx", "2026-11-19T11:00")
-    named = doc("Design template.pptx", "2026-11-19T08:00")
+    job_aid = doc("D2R JOB AID TEMPLATE 1.pptx", "2026-11-19T09:00")
+    ilt = doc("D2R ILT - Account Planning.pptx", "2026-11-19T11:00")
     broken = doc("Broken template.pptx", "2026-11-19T12:00", status="failed")
-    assert rd.pick_reference([manual, older, newer]) is newer
-    assert rd.pick_reference([manual, older, newer, named, broken]) is named
+    # A name with "template" in it no longer beats a newer upload.
+    assert rd.pick_reference([manual, job_aid, ilt, broken]) is ilt
+    assert rd.pick_reference([manual, job_aid, ilt], "Make it like the job aid") is job_aid
+    assert rd.pick_reference([manual, job_aid, ilt], "use the account planning deck") is ilt
+    # "D2R" is in both names, so it picks neither; the latest wins.
+    assert rd.pick_reference([manual, job_aid, ilt], "copy the D2R design") is ilt
     assert rd.pick_reference([manual]) is None
 
 
@@ -341,3 +344,18 @@ def test_preparing_the_reference_never_changes_the_uploaded_file(reference_bytes
 
     assert note == "" and prepared.path != source
     assert source.read_bytes() == reference_bytes
+
+
+def test_a_newer_reference_wins_even_when_the_older_one_is_called_a_template(store):
+    """Seen in testing: the Job Aid deck kept being used after the ILT deck was
+    uploaded, because its file name contains "template"."""
+    _upload(store, "s1", "LOTO manual.pdf", "a")
+    job_aid = _upload(store, "s1", "D2R JOB AID TEMPLATE 1.pptx", "b")
+    rd.claim_from_message("s1", "Create a LOTO job aid")
+    assert _reference_of("s1")["doc_id"] == job_aid.doc_id
+
+    ilt = _upload(store, "s1", "D2R ILT - Account Planning.pptx", "c")
+    note = rd.claim_from_message("s1", "Create a LOTO training deck")
+
+    assert "D2R ILT - Account Planning.pptx" in note
+    assert _reference_of("s1")["doc_id"] == ilt.doc_id

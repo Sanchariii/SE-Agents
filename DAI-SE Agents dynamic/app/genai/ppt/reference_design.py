@@ -78,21 +78,38 @@ def is_deck(record) -> bool:
     return str(getattr(record, "filename", "")).lower().endswith(C.EXTENSIONS)
 
 
-def pick_reference(records) -> object | None:
+_GENERIC_NAME_WORDS = {"the", "and", "for", "ppt", "pptx", "potx", "deck", "copy",
+                       "template", "final", "draft", "new", "old", "version"}
+
+
+def _name_words(text):
+    """Distinctive lower-case words of a file name or message (3+ characters)."""
+    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower())
+            if len(w) >= 3 and w not in _GENERIC_NAME_WORDS}
+
+
+def pick_reference(records, message=""):
     """The uploaded deck to copy the design of.
 
-    Of the latest uploaded decks: the one whose file name says it is a reference
-    ("template", "design", ...), else the most recently uploaded one.
+    Of the latest uploaded decks: the one the user names in this message ("use the
+    ILT deck"), else the most recently uploaded one. A name word shared by several
+    decks (e.g. "D2R") does not single one out.
     """
     decks = [r for r in records if getattr(r, "is_latest", True) and is_deck(r)
              and str(getattr(r, "status", "")).split(".")[-1] != "failed"]
     if not decks:
         return None
-    named = [r for r in decks
-             if any(hint in r.filename.lower() for hint in C.NAME_HINTS)]
-    pool = named or decks
-    return max(pool, key=lambda r: (str(getattr(r, "uploaded_at", "") or ""),
-                                    getattr(r, "version", 0)))
+    said = _name_words(message)
+    if said:
+        words = {id(r): _name_words(Path(r.filename).stem) for r in decks}
+        shared = set.intersection(*words.values()) if len(decks) > 1 else set()
+        scores = {id(r): len((words[id(r)] - shared) & said) for r in decks}
+        best = max(scores.values())
+        named = [r for r in decks if best and scores[id(r)] == best]
+        if len(named) == 1:
+            return named[0]
+    return max(decks, key=lambda r: (str(getattr(r, "uploaded_at", "") or ""),
+                                     getattr(r, "version", 0)))
 
 
 def record_of(record) -> dict:
@@ -143,7 +160,7 @@ def claim_from_message(session_id: str, message: str) -> str:
 
     def drop(reason: str) -> str:
         name = current.get("filename", "the reference")
-        chosen = pick_reference(docs)
+        chosen = pick_reference(docs, message)
         brief.design_reference = {}
         brief.design_reference_declined = _key(record_of(chosen)) if chosen else ""
         brief.save(session_id)
@@ -153,12 +170,12 @@ def claim_from_message(session_id: str, message: str) -> str:
 
     if asks_to_drop_design(message):
         if not current:
-            if pick_reference(docs) is not None:
+            if pick_reference(docs, message) is not None:
                 drop("")
             return ""
         return drop(f"Stopped copying the design of {current.get('filename')}; using "
                     "the Rockwell template.")
-    if asks_for_deck_as_content(message) and pick_reference(docs) is not None:
+    if asks_for_deck_as_content(message) and pick_reference(docs, message) is not None:
         if current:
             return drop(f"Using {current.get('filename')} as content, not as the "
                         "design; the deck uses the Rockwell template.")
@@ -166,7 +183,7 @@ def claim_from_message(session_id: str, message: str) -> str:
         return ""
 
     explicit = asks_to_copy_design(message)
-    chosen = pick_reference(docs)
+    chosen = pick_reference(docs, message)
     if chosen is None:
         if explicit:
             log.info("the user asked to copy a design but no PowerPoint is uploaded",

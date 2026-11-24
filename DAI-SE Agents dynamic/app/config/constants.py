@@ -783,8 +783,6 @@ class ReferenceDesignConstants:
         r"that\s+)?(?:attached\s+|uploaded\s+)?(?:ppt|pptx|deck|presentation|slides)\b|"
         r"\buse\s+(?:the\s+|this\s+|my\s+)?(?:attached\s+|uploaded\s+)?"
         r"(?:ppt|pptx|deck|presentation|slides)\s+as\s+(?:the\s+)?(?:content|source)")
-    #: When several decks are uploaded, a file name with one of these words wins.
-    NAME_HINTS = ("reference", "template", "design", "theme", "style")
     EXTENSIONS = (".pptx", ".potx")
     #: Prepared copies (slides stripped, layouts kept), one per reference file content.
     CACHE_DIRNAME = "se_reference_designs"
