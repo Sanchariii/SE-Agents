@@ -204,6 +204,8 @@ class Prepared:
     sha256: str
     #: What happened to the reference's logos.
     rebrand: RebrandReport = field(default_factory=RebrandReport)
+    #: The reference's structure (`reference_profile.ReferenceProfiler`); {} if unread.
+    profile: dict = field(default_factory=dict)
 
     @property
     def cache_key(self) -> str:
@@ -231,6 +233,27 @@ def strip_slides(data: bytes, out_path: Path, suffix: str = ".pptx") -> None:
         partial = out_path.with_name(out_path.stem + ".part.pptx")
         prs.save(str(partial))
         partial.replace(out_path)
+    finally:
+        raw.unlink(missing_ok=True)
+
+
+def profile_bytes(data, out_path, suffix=".pptx"):
+    """The structure profile of the reference, read before its slides are stripped.
+
+    Best effort: the profile only guides planning, so a deck that cannot be profiled
+    is still used for its design, with an empty profile.
+    """
+    from app.genai.ppt.reference_profile import ReferenceProfiler
+
+    raw = out_path.with_name(out_path.stem + ".profile-source" + suffix)
+    try:
+        raw.write_bytes(data)
+        return ReferenceProfiler().profile(raw)
+    except Exception as exc:                                 # noqa: BLE001
+        log.warning("reference %s could not be profiled (%s); its design is still "
+                    "used, without structure guidance", out_path.name, exc,
+                    exc_info=True)
+        return {}
     finally:
         raw.unlink(missing_ok=True)
 
@@ -312,9 +335,12 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
         target = folder / (f"{hashlib.sha1(digest.encode()).hexdigest()[:16]}"
                            f"-v{C.PREPARED_VERSION}.pptx")
         report_path = target.with_suffix(".json")
+        profile_path = target.with_name(target.stem + ".profile.json")
         if target.is_file():
             report = RebrandReport.from_dict(
                 json.loads(report_path.read_text()) if report_path.is_file() else {})
+            profile = (json.loads(profile_path.read_text())
+                       if profile_path.is_file() else {})
         else:
             if read_bytes is None:
                 from app.utilities import storage_util
@@ -329,10 +355,14 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
             # Built under a work name and moved into place only when complete, so a
             # failure part-way never leaves a copy without Rockwell's logo in the cache.
             work = target.with_name(target.stem + ".work.pptx")
+            suffix = Path(name).suffix.lower() or ".pptx"
             try:
-                strip_slides(data, work, Path(name).suffix.lower() or ".pptx")
+                folder.mkdir(parents=True, exist_ok=True)
+                profile = profile_bytes(data, work, suffix)
+                strip_slides(data, work, suffix)
                 report = rebrand_file(work)
                 report_path.write_text(json.dumps(report.to_dict()))
+                profile_path.write_text(json.dumps(profile))
                 work.replace(target)
             finally:
                 work.unlink(missing_ok=True)
@@ -347,7 +377,8 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
                       "built on the Rockwell template instead.")
     log.info("reference design ready: %s -> %s", name, target.name,
              extra={"session_id": session_id})
-    return Prepared(path=target, filename=name, sha256=digest, rebrand=report), ""
+    return Prepared(path=target, filename=name, sha256=digest, rebrand=report,
+                    profile=profile), ""
 
 
 def with_guidance(params: dict) -> dict:

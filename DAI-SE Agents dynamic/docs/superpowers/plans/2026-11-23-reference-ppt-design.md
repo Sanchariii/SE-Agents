@@ -82,12 +82,12 @@ Per deck: slides asked vs made; geometry-gate pass rate; how many slides fell ba
 - [x] Split `app/genai/ppt/reference_rebrand.py` (608 lines) into small classes under `app/genai/ppt/rebrand/` (`Geometry`, `MarkLibrary`, `LogoFinder`, `MarkPlacer`, `Rebrander`), each < 150 lines, no type annotations, same behaviour.
 - [x] `tests/test_reference_rebrand.py` passes, updated only to call the new class names; prepared D2R decks are byte-identical to the old code's output.
 
-### Task 1.2 - Reference profiler (`app/genai/ppt/reference_profile.py`, new, < 200 lines)
-`ReferenceProfiler.profile(path)` reads the reference once and returns a JSON profile - **no text from the deck**:
-- [ ] per slide: **role** (cover, agenda, section, content, quiz, closing - from layout name and placeholders), **pattern** (columns, cards, image left/right, table, chart, numbered steps, quote), **density** (bullet count, character bucket);
-- [ ] deck level: slide count, section cadence (e.g. "quiz every 4 content slides"), layout usage counts;
-- [ ] uses the existing `template/catalog.py` readers; no LLM in v1 (an optional vision description is a later upgrade).
-- [ ] Tests on `PPTs/D2R ILT - Account Planning.pptx` and `PPTs/D2R JOB AID TEMPLATE 1.pptx`, plus a canary test: a unique phrase on a reference slide never appears in the profile.
+### Task 1.2 - Reference profiler (`app/genai/ppt/reference_profile.py`, 172 lines) - done
+`ReferenceProfiler.profile(path)` reads the reference once, before its slides are stripped, and returns a JSON profile - **no text from the deck**:
+- [x] per slide: layout key, **role** (cover, agenda, section, content, quiz, takeaways, closing - from layout name, then title as a hint, then position), **pattern** (columns-N, image left/right/centre, full image, screenshot, grid, cards, table, chart, diagram, text), **density** (paragraphs, characters, light/medium/heavy);
+- [x] deck level: slide count, role sequence, layout usage counts, quiz and section cadence;
+- [x] no LLM; `prepare()` stores it beside the prepared copy (`*.profile.json`, `PREPARED_VERSION` 3) and returns it as `Prepared.profile`; a deck that cannot be profiled still gives its design.
+- [x] `tests/test_reference_profile.py`: roles, patterns, cache, failure path, D2R ILT deck, and a canary test that no reference text reaches the profile.
 
 ### Task 1.3 - Resolve the active reference
 `ReferenceResolver.for_turn(session_id, reference_ids, active_skill)` in `reference_design.py`:
