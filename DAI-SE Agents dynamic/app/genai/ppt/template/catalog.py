@@ -21,6 +21,7 @@ there is one text-measurement model in the codebase and not two that drift apart
 
 import difflib
 import io
+import json
 import re
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
@@ -651,6 +652,10 @@ class TemplateCatalog:
         # so it can never become the preferred or cover master, a canonical copy of a
         # name, or a candidate any LOW/MED selection sees.
         hc_master = _high_creativity_master(themes)
+        # A prepared reference deck has had its slides stripped, so its usage comes from
+        # the counts its profile took before stripping (none for the brand template).
+        reference = _reference_usage(template_path) if not len(prs.slides) else {}
+        reference_usage = reference.get("layout_usage", {})
         layouts: list[LayoutInfo] = []
         hc_layouts: list[LayoutInfo] = []
         for mi, master in enumerate(masters):
@@ -658,6 +663,8 @@ class TemplateCatalog:
                 titles = usage.get((mi, li), [])
                 info = _read_layout(layout, mi, li, themes[mi], txstyles[mi],
                                     slide_w, slide_h, titles)
+                if reference_usage:
+                    info.usage_count = reference_usage.get(info.key, 0)
                 (hc_layouts if mi == hc_master else layouts).append(info)
         if hc_master is not None:
             _prepare_high_creativity(hc_layouts, masters[hc_master], slide_w, slide_h)
@@ -665,13 +672,26 @@ class TemplateCatalog:
         # Canonical selection: identical names across masters -> prefer the most used master.
         master_usage = {mi: sum(len(v) for (m, _), v in usage.items() if m == mi)
                         for mi in range(len(masters))}
+        content_usage = cover_usage = master_usage
+        if reference_usage:
+            # The reference's own slides decide: its content master is the one its
+            # content slides use, its cover master the one its cover uses, so a master
+            # used only for dividers (or an unused default Office master) is not picked.
+            master_usage = _per_master(reference_usage, len(masters))
+            content_usage = _per_master(reference.get("content_usage") or reference_usage,
+                                        len(masters))
+            cover_usage = _per_master(reference.get("cover_usage") or reference_usage,
+                                      len(masters))
+            log.info("reference usage from its profile: per master %s, content %s, "
+                     "cover %s", master_usage, content_usage, cover_usage)
         content_masters = [mi for mi in range(len(masters))
                            if any("content" in l.tags for l in layouts if l.master_index == mi)]
-        preferred = max(content_masters or [0], key=lambda mi: (master_usage.get(mi, 0), -mi))
+        preferred = max(content_masters or [0], key=lambda mi: (content_usage.get(mi, 0),
+                                                                master_usage.get(mi, 0), -mi))
         cover_masters = [mi for mi in range(len(masters))
                          if any("cover" in l.tags for l in layouts if l.master_index == mi)]
         cover_master = max(cover_masters or [preferred],
-                           key=lambda mi: (master_usage.get(mi, 0), -mi))
+                           key=lambda mi: (cover_usage.get(mi, 0), master_usage.get(mi, 0), -mi))
         groups: dict[str, list[LayoutInfo]] = {}
         for l in layouts:
             groups.setdefault(_norm_name(l.name), []).append(l)
@@ -1540,6 +1560,30 @@ def _load(path: str, mtime: float) -> TemplateCatalog:
              sum(1 for l in catalog.layouts if l.canvas_capable),
              catalog.sample_slide_count)
     return catalog
+
+
+def _per_master(usage: dict[str, int], master_count: int) -> dict[int, int]:
+    """Layout usage ("M1-L4" -> n) summed per master index."""
+    return {mi: sum(n for key, n in usage.items() if key.startswith(f"M{mi}-"))
+            for mi in range(master_count)}
+
+
+def _reference_usage(template_path) -> dict[str, dict[str, int]]:
+    """The usage counts `reference_profile` recorded beside a prepared reference deck -
+    "layout_usage", "content_usage", "cover_usage", each "M1-L4" -> n; {} when there is
+    no profile (the brand template)."""
+    profile = Path(str(template_path)).with_name(Path(str(template_path)).stem
+                                                 + ".profile.json")
+    if not profile.is_file():
+        return {}
+    try:
+        data = json.loads(profile.read_text())
+        return {name: {str(key): int(n) for key, n in (data.get(name) or {}).items()}
+                for name in ("layout_usage", "content_usage", "cover_usage")}
+    except (ValueError, TypeError, AttributeError) as exc:
+        log.warning("reference profile %s unreadable (%s); usage left at zero",
+                    profile.name, exc)
+        return {}
 
 
 def load(path: str | None = None) -> TemplateCatalog:

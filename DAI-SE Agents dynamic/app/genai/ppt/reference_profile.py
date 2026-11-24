@@ -62,10 +62,18 @@ class ReferenceProfiler:
         profile = {"slide_count": total, "slides": slides,
                    "sequence": [s["role"] for s in slides],
                    "layout_usage": dict(Counter(s["layout"] for s in slides if s["layout"])),
+                   "content_usage": self._usage(slides, ("content", "takeaways", "quiz")),
+                   "cover_usage": self._usage(slides, ("cover",)),
                    "cadence": self._cadence(slides)}
         log.info("reference profiled: %d slide(s), roles %s", total,
                  dict(Counter(profile["sequence"])))
         return profile
+
+    @staticmethod
+    def _usage(slides, roles):
+        """Layout usage counted only over slides with one of ``roles``."""
+        return dict(Counter(s["layout"] for s in slides
+                            if s["layout"] and s["role"] in roles))
 
     @staticmethod
     def _title(slide):

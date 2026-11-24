@@ -97,3 +97,25 @@ def test_the_d2r_reference_deck_is_profiled_as_its_authors_built_it():
     patterns = {s["pattern"] for s in profile["slides"]}
     assert {"columns-3", "screenshot", "table"} <= patterns
     assert profile["cadence"]["section_every"] > 0
+
+
+def test_the_catalog_builds_on_the_master_the_references_content_slides_use(tmp_path):
+    """Stripping the slides used to zero every usage count, so the catalog fell back to
+    master 0 - for the Job Aid deck a plain default Office master - and the deck lost
+    the reference's look. The profile's counts now pick the real content master."""
+    from app.genai.ppt.template import catalog as catalog_mod
+
+    path = PPTS / "D2R JOB AID TEMPLATE 1.pptx"
+    if not path.is_file():
+        pytest.skip("the D2R reference deck is not in this checkout")
+    data = path.read_bytes()
+    record = {"doc_id": "d", "version": 1, "filename": path.name,
+              "sha256": hashlib.sha256(data).hexdigest(), "storage_path": "x"}
+    prepared, note = rd.prepare("s", record, read_bytes=lambda _p: data,
+                                cache_dir=tmp_path / "cache")
+
+    catalog = catalog_mod.load(str(prepared.path))
+
+    assert note == ""
+    assert catalog.themes[catalog.preferred_master].name == "1_CONTENT LAYOUTS"
+    assert max(l.usage_count for l in catalog.layouts) > 0
