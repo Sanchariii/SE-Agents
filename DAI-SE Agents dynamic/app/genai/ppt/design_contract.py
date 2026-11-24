@@ -312,7 +312,8 @@ def validate_assignments(raw, plan: DeckPlan, catalog,
                 f"canvas_capable layout")
             continue
         if (kinds[number] not in _EXEMPT_KINDS
-                and layout.master_index != catalog.preferred_master):
+                and layout.master_index != catalog.preferred_master
+                and layout.key not in _reference_layout_keys(catalog)):
             problems.append(
                 f"slide {number}: '{layout.key}' is on master M{layout.master_index}, "
                 f"but content slides must stay on the preferred content master "
@@ -444,6 +445,21 @@ def build(plan: DeckPlan, draft: DeckDraft, *, catalog=None,
     return contract
 
 
+def _reference_layouts(catalog) -> list:
+    """The layouts a reference deck's own slides used, most used first; [] when the
+    deck is built on the brand template (no reference), so its prompt is unchanged."""
+    if registry.template_override() is None:
+        return []
+    return sorted((l for l in catalog.layouts if l.usage_count > 0),
+                  key=lambda l: (-l.usage_count, l.master_index, l.layout_index))
+
+
+def _reference_layout_keys(catalog) -> set:
+    """Keys of `_reference_layouts`: a reference spreads its content over several
+    masters, and any layout it used itself is fair game, not only the preferred one."""
+    return {layout.key for layout in _reference_layouts(catalog)}
+
+
 def _describe_deck(plan: DeckPlan, draft: DeckDraft, catalog,
                    skill_guidance="") -> str:
     """Every slide's shape plus the layout menu, as one prompt."""
@@ -468,6 +484,13 @@ def _describe_deck(plan: DeckPlan, draft: DeckDraft, catalog,
         if layout.canvas_capable:
             lines.append(f"  {layout.key} '{layout.name}' - "
                          f"{layout.free_region.height:.2f}in of free height")
+    used = _reference_layouts(catalog)
+    if used:
+        lines += ["", "LAYOUTS THE USER'S REFERENCE DECK USES (its look lives here - header "
+                  "bands, artwork, picture frames). For every slide, prefer one of these "
+                  "whose slots fit the content; use another layout only when none fits:"]
+        lines += [f"  {layout.compact()} | used on {layout.usage_count} reference slide(s)"
+                  for layout in used]
     lines += ["", "LAYOUT CATALOG:", catalog.summary_text()]
     if skill_guidance:
         lines += [

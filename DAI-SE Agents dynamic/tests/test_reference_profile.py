@@ -119,3 +119,61 @@ def test_the_catalog_builds_on_the_master_the_references_content_slides_use(tmp_
     assert note == ""
     assert catalog.themes[catalog.preferred_master].name == "1_CONTENT LAYOUTS"
     assert max(l.usage_count for l in catalog.layouts) > 0
+
+
+@pytest.fixture
+def job_aid_reference(tmp_path):
+    """The D2R Job Aid deck, prepared as a reference (slides stripped, profile kept)."""
+    path = PPTS / "D2R JOB AID TEMPLATE 1.pptx"
+    if not path.is_file():
+        pytest.skip("the D2R reference deck is not in this checkout")
+    data = path.read_bytes()
+    record = {"doc_id": "d", "version": 1, "filename": path.name,
+              "sha256": hashlib.sha256(data).hexdigest(), "storage_path": "x"}
+    prepared, _ = rd.prepare("s", record, read_bytes=lambda _p: data,
+                             cache_dir=tmp_path / "cache")
+    return prepared.path
+
+
+def _plan_and_draft():
+    from app.core.models.deck_model import DeckDraft, DeckPlan, SlideDraft, SlidePlan
+
+    plan = DeckPlan(title="LOTO", classification="internal", slides=[
+        SlidePlan(slide_number=1, kind="cover", title="LOTO"),
+        SlidePlan(slide_number=2, kind="content", title="Step 1")])
+    draft = DeckDraft(title="LOTO", slides=[
+        SlideDraft(slide_number=s.slide_number, kind=s.kind, title=s.title)
+        for s in plan.slides])
+    return plan, draft
+
+
+def test_the_art_director_is_shown_the_layouts_the_reference_uses(job_aid_reference):
+    from app.genai.ppt import design_contract as dc
+    from app.genai.ppt.template import catalog as catalog_mod, registry
+
+    plan, draft = _plan_and_draft()
+    with registry.using_template(job_aid_reference):
+        prompt = dc._describe_deck(plan, draft, catalog_mod.load(str(job_aid_reference)))
+    brand = dc._describe_deck(plan, draft, catalog_mod.load())
+
+    assert "LAYOUTS THE USER'S REFERENCE DECK USES" in prompt
+    assert "'2 Column C'" in prompt and "'1 Column H'" in prompt
+    assert "REFERENCE DECK USES" not in brand              # brand-template prompt unchanged
+
+
+def test_a_layout_the_reference_used_is_allowed_off_the_preferred_master(
+        job_aid_reference):
+    from app.genai.ppt import design_contract as dc
+    from app.genai.ppt.template import catalog as catalog_mod, registry
+
+    plan, _ = _plan_and_draft()
+    with registry.using_template(job_aid_reference):
+        catalog = catalog_mod.load(str(job_aid_reference))
+        used_elsewhere = next(l for l in dc._reference_layouts(catalog)
+                              if l.master_index != catalog.preferred_master
+                              and "content" in l.tags)
+        parsed, problems = dc.validate_assignments(
+            [{"slide_number": 2, "mode": "layout", "layout_key": used_elsewhere.key}],
+            plan, catalog)
+
+    assert 2 in parsed and not problems
