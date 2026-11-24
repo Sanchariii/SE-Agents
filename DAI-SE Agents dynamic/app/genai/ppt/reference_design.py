@@ -20,7 +20,7 @@ backgrounds, artwork, colours and fonts - and nothing else:
    the design faithfully.
 
 The logo is the one part of the design that is never copied: ``prepare`` also runs
-``reference_rebrand.rebrand``, which keeps Rockwell marks, swaps any other company's
+``rebrand.Rebrander``, which keeps Rockwell marks, swaps any other company's
 logo for Rockwell's and adds Rockwell's to layouts that have none. The stamped frame
 (classification label and slide number) stays on every slide, as on any deck the app
 publishes.
@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.config.constants import ReferenceDesignConstants as C
-from app.genai.ppt.reference_rebrand import RebrandReport
+from app.genai.ppt.rebrand import RebrandReport
 from app.utilities.logger_util import get_logger
 
 log = get_logger(__name__)
@@ -246,7 +246,7 @@ def rebrand_file(path: Path) -> RebrandReport:
         brand-template fallback, because a reference that might still carry another
         company's logo must not be built on.
     """
-    from app.genai.ppt import reference_rebrand
+    from app.genai.ppt.rebrand import Rebrander
     from app.genai.ppt.template import catalog as catalog_mod, loader
 
     catalog = catalog_mod.load(str(path))
@@ -266,7 +266,7 @@ def rebrand_file(path: Path) -> RebrandReport:
         return catalog_mod.shape_luminance(shape, theme)
 
     prs = loader.open_presentation(str(path))
-    report = reference_rebrand.rebrand(prs, luminance_of, shade_of=shade_of)
+    report = Rebrander().run(prs, luminance_of, shade_of=shade_of)
     prs.save(str(path))
     return report
 

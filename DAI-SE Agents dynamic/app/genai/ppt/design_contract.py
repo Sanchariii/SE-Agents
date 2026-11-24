@@ -112,7 +112,7 @@ def frame_for_layout(classification: str, slide_width: float, slide_height: floa
     variant = builder.logo_variant_for(luminance)
     logo_file = "d2r_mark_white.png" if variant == "white" else "d2r_mark.png"
     # A reference deck already carries Rockwell's logo in its layouts
-    # (`reference_rebrand`), often in the corner the frame would stamp; a second mark
+    # (`app.genai.ppt.rebrand`), often in the corner the frame would stamp; a second mark
     # there would sit on top of it.
     reference = registry.template_override()
     logo = None if reference is not None else registry.logo_path(logo_file)

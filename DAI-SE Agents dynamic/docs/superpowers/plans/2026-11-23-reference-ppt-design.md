@@ -79,8 +79,8 @@ Per deck: slides asked vs made; geometry-gate pass rate; how many slides fell ba
 ## Phase 1 - Foundation (needed by A and B; no dependencies, start now)
 
 ### Task 1.1 - Bring the existing branch to the team's code rules
-- [ ] Split `app/genai/ppt/reference_rebrand.py` (608 lines) into small classes under `app/genai/ppt/rebrand/` (`MarkLibrary`, `LogoFinder`, `MarkPlacer`, `Rebrander`), each < 200 lines, no type annotations, same behaviour.
-- [ ] `tests/test_reference_rebrand.py` passes with only its import line changed.
+- [x] Split `app/genai/ppt/reference_rebrand.py` (608 lines) into small classes under `app/genai/ppt/rebrand/` (`Geometry`, `MarkLibrary`, `LogoFinder`, `MarkPlacer`, `Rebrander`), each < 150 lines, no type annotations, same behaviour.
+- [x] `tests/test_reference_rebrand.py` passes, updated only to call the new class names; prepared D2R decks are byte-identical to the old code's output.
 
 ### Task 1.2 - Reference profiler (`app/genai/ppt/reference_profile.py`, new, < 200 lines)
 `ReferenceProfiler.profile(path)` reads the reference once and returns a JSON profile - **no text from the deck**:

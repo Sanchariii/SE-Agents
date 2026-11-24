@@ -803,7 +803,7 @@ class ReferenceDesignConstants:
         "comes from this slide's content. Never draw or place a logo: the Rockwell logo "
         "is already part of the layouts.")
 
-    # --- Rockwell's logo on the reference (app.genai.ppt.reference_rebrand) --------- #
+    # --- Rockwell's logo on the reference (app.genai.ppt.rebrand) ------------------- #
     #: Bump when the preparation changes, so copies prepared by an older build are
     #: not reused from the cache.
     PREPARED_VERSION = 2

@@ -1,4 +1,4 @@
-"""Rockwell's logo on a reference design (`app.genai.ppt.reference_rebrand`).
+"""Rockwell's logo on a reference design (`app.genai.ppt.rebrand`).
 
 A deck built on someone else's template must carry Rockwell's logo and nobody
 else's: their logos are swapped for Rockwell's in place, Rockwell marks already there
@@ -15,7 +15,9 @@ from pptx.dml.color import RGBColor
 from pptx.util import Inches
 
 from app.config.constants import PptConstants, ReferenceDesignConstants as C
-from app.genai.ppt import design_contract, reference_design as rd, reference_rebrand as rr
+from app.genai.ppt import design_contract, reference_design as rd
+from app.genai.ppt.rebrand import Geometry, MarkLibrary, Rebrander
+from app.genai.ppt.rebrand.placer import R_EMBED
 from app.genai.ppt.template import catalog as catalog_mod, registry
 
 LOGOS = registry.template_root() / PptConstants.LOGO_DIR
@@ -63,12 +65,12 @@ def _grouped_picture(prs, owner, data: bytes, left, top, width, height):
     owner.shapes._spTree.insert_element_before(element, "p:extLst")
     _, rel_id = owner.part.get_or_add_image_part(io.BytesIO(data))
     for blip in element.iter("{http://schemas.openxmlformats.org/drawingml/2006/main}blip"):
-        blip.set(rr._R_EMBED, rel_id)
+        blip.set(R_EMBED, rel_id)
 
 
 def _is_rockwell(shape, marks) -> bool:
     try:
-        return rr.is_rockwell_mark(shape.image.blob, marks)
+        return MarkLibrary.is_rockwell(shape.image.blob, marks)
     except ValueError:                                # a linked picture
         return False
 
@@ -118,18 +120,18 @@ def _blobs(owner) -> list[bytes]:
                                   "ra_lockup_white.png", "recognised/d2r_ribbon.png",
                                   "d2r_mark.png"])
 def test_rockwell_marks_are_recognised(name):
-    assert rr.is_rockwell_mark((LOGOS / name).read_bytes())
+    assert MarkLibrary.is_rockwell((LOGOS / name).read_bytes())
 
 
 def test_a_resized_rockwell_mark_is_still_recognised():
     image = Image.open(LOGOS / "ra_mark.png")
     out = io.BytesIO()
     image.resize((image.width * 3, image.height * 3)).save(out, "PNG")
-    assert rr.is_rockwell_mark(out.getvalue())
+    assert MarkLibrary.is_rockwell(out.getvalue())
 
 
 def test_another_companys_logo_is_not_a_rockwell_mark():
-    assert not rr.is_rockwell_mark(_acme())
+    assert not MarkLibrary.is_rockwell(_acme())
 
 
 # --- the pass ----------------------------------------------------------------------- #
@@ -142,11 +144,11 @@ def test_another_companys_logo_is_replaced_and_every_layout_shows_rockwells(
     assert prepared.rebrand.no_room == []
     prs = Presentation(str(prepared.path))
     master = prs.slide_masters[0]
-    assert not any(rr._matches(rr.fingerprint(b), [rr.fingerprint(_acme())])
+    assert not any(MarkLibrary.matches(MarkLibrary.fingerprint(b), [MarkLibrary.fingerprint(_acme())])
                    for b in _blobs(master))
     # The replacement is a Rockwell mark, still in the master's top-right corner.
     (mark,) = _marks_on(master)
-    assert rr.is_rockwell_mark(mark.image.blob)
+    assert MarkLibrary.is_rockwell(mark.image.blob)
     assert mark.left / 914400 > 10 and mark.top / 914400 < 1
     for layout in master.slide_layouts:
         shows_master = layout.element.get("showMasterSp") != "0"
@@ -178,7 +180,7 @@ def test_a_rockwell_logo_already_there_is_kept_and_nothing_is_added(tmp_path):
     # Inside a group, as the brand template's own closing slides draw it.
     _grouped_picture(prs, master, hexagon, 0.3, 0.3, 0.6, 0.65)
 
-    report = rr.rebrand(prs)
+    report = Rebrander().run(prs)
 
     assert (report.kept, report.replaced, report.added) == (1, 0, 0)
     assert report.note() == ""
@@ -193,7 +195,7 @@ def test_a_layout_with_a_full_width_title_gets_the_lockup_in_the_footer():
     title.left, title.top = Inches(0.4), Inches(0.3)
     title.width, title.height = Inches(12.5), Inches(1.0)
 
-    rr.rebrand(prs)
+    Rebrander().run(prs)
 
     (mark,) = _marks_on(layout)
     assert mark.image.blob == (LOGOS / C.LOCKUP_COLOR).read_bytes()
@@ -211,9 +213,9 @@ def test_a_prepared_reference_from_an_older_build_is_not_reused(foreign_deck,
 
 def test_a_reference_that_cannot_be_rebranded_falls_back_to_the_brand_template(
         foreign_deck, tmp_path, monkeypatch):
-    def broken(_prs, *_a, **_k):
+    def broken(_self, _prs, *_a, **_k):
         raise RuntimeError("boom")
-    monkeypatch.setattr(rr, "rebrand", broken)
+    monkeypatch.setattr(Rebrander, "run", broken)
 
     prepared, note = _prepare(foreign_deck, tmp_path)
 
@@ -250,15 +252,15 @@ def test_the_supplied_reference_decks_end_up_with_a_rockwell_logo_on_every_layou
 
     assert note == "" and prepared is not None
     assert prepared.rebrand.no_room == []
-    marks = rr.known_marks()
+    marks = MarkLibrary.known_marks()
     prs = Presentation(str(prepared.path))
     width, height = prs.slide_width / 914400, prs.slide_height / 914400
     for master in prs.slide_masters:
         master_mark = any(_is_rockwell(s, marks)
-                          for s, box in rr._pictures(master.shapes)
-                          if rr._is_logo_sized(box, width, height))
+                          for s, box in Geometry.pictures(master.shapes)
+                          if Geometry.is_logo_sized(box, width, height))
         for layout in master.slide_layouts:
             own = any(_is_rockwell(s, marks)
-                      for s, box in rr._pictures(layout.shapes)
-                      if rr._is_logo_sized(box, width, height))
-            assert own or (master_mark and rr._shows_master_shapes(layout)), layout.name
+                      for s, box in Geometry.pictures(layout.shapes)
+                      if Geometry.is_logo_sized(box, width, height))
+            assert own or (master_mark and Geometry.shows_master_shapes(layout)), layout.name
