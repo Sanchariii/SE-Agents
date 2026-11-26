@@ -205,6 +205,12 @@ def build_plan(session_id: str, instruction: str, layout_menu: str = "") -> Unde
             f"CONVERSATION:\n{convo}\n\nUSER INSTRUCTION:\n{instruction}")
     if layout_menu:
         user += f"\n\nLAYOUT MENU:\n{layout_menu}"
+    # Only when the user's design reference opens its topics with section slides; with
+    # no reference the planner's prompt is exactly what it was.
+    from app.genai.ppt import reference_design
+    structure = reference_design.planning_block(session_id)
+    if structure:
+        user += f"\n\n{structure}"
     log.info("build_plan: %s layout menu", "with a" if layout_menu else "WITHOUT a",
              extra={"session_id": session_id})
     output = get_apim_llm_client().chat_json(

@@ -348,6 +348,14 @@ def run_role_slide_agent(
             slide_draft=previous,
             coverage="good",
         )
+    if slide_plan.kind == "section":
+        # A section divider is its title and nothing else, so no model call is needed.
+        return SlideResult(
+            slide_number=slide_plan.slide_number,
+            slide_draft=SlideDraft(slide_number=slide_plan.slide_number, kind="section",
+                                   title=slide_plan.title, blocks=[]),
+            coverage="good",
+        )
 
     events.publish(
         session_id,

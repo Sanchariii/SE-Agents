@@ -31,7 +31,7 @@ from app.utilities.structured_output import extract_json, finish_reason, parse_j
 log = get_logger(__name__)
 
 #: Slide kinds exempt from master uniformity, matching main_v3.
-_EXEMPT_KINDS = ("cover", "thanks")
+_EXEMPT_KINDS = ("cover", "section", "thanks")
 
 #: Intents the catalog ranks for. Anything else falls back to "content".
 _VISUAL_INTENTS = ("table", "chart", "photo", "process", "dashboard", "comparison",
@@ -233,7 +233,7 @@ def _intent_for(slide) -> str:
     horizontal flow"), so their keywords are matched rather than the whole string.
     """
     kind = getattr(slide, "kind", "content")
-    if kind in ("cover", "agenda", "thanks"):
+    if kind in ("cover", "agenda", "section", "thanks"):
         return {"thanks": "closing"}.get(kind, kind)
     visual = (getattr(slide, "visual", "") or "").strip().lower()
     if visual in _VISUAL_INTENTS:
@@ -420,6 +420,7 @@ def build(plan: DeckPlan, draft: DeckDraft, *, catalog=None,
         if number not in accepted:
             accepted[number] = fallback_assignment(slide, catalog,
                                                    catalog.preferred_master)
+    _reference_sections_on_their_layout(accepted, slides_by_number, catalog)
     contract.assignments = accepted
     fell_back = sorted(set(accepted) - directed)
     canvas = sum(1 for a in accepted.values() if a.mode == "canvas")
@@ -452,6 +453,22 @@ def _reference_layouts(catalog) -> list:
         return []
     return sorted((l for l in catalog.layouts if l.usage_count > 0),
                   key=lambda l: (-l.usage_count, l.master_index, l.layout_index))
+
+
+def _reference_sections_on_their_layout(accepted, slides_by_number, catalog) -> None:
+    """Put every section slide on the layout the reference's own section slides use,
+    whatever the art director chose: that layout carries the divider's look."""
+    from app.genai.ppt.reference_profile import ReferenceProfiler
+
+    key = ReferenceProfiler.top_layout(registry.template_override(), "section_usage")
+    if not key or catalog.get(key) is None:
+        return
+    for number, slide in slides_by_number.items():
+        if getattr(slide, "kind", "") == "section":
+            accepted[number] = SlideAssignment(slide_number=number, mode="layout",
+                                               layout_key=key)
+            log.info("slide %d: section divider on the reference's section layout %s",
+                     number, key)
 
 
 def _reference_layout_keys(catalog) -> set:

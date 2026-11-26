@@ -1490,6 +1490,8 @@ def _collect(state: WorkflowState) -> dict:
                 stitcher = DeckStitcher(sid)
                 deck_path = stitcher.stitch(slide_files, workdir / "deck.pptx")
                 gaps += stitcher.notes
+                if reference is not None:
+                    _stamp_section_art(sid, deck_path, draft, reference)
                 slide_cache.save(sid, artifacts)
         # Polish recolours and restyles towards the Rockwell brand, which would undo a
         # copied design, so it never runs on one.
@@ -1615,6 +1617,25 @@ def _after_planning(state: WorkflowState) -> str:
 
 def _after_collect(state: WorkflowState) -> str:
     return "publish" if state.get("pending_publish") else "done"
+
+
+def _stamp_section_art(sid, deck_path, draft, reference) -> None:
+    """Best effort: the reference's section-number artwork on our section slides."""
+    from app.genai.ppt.reference_art import SectionArt
+
+    titles = [s.title for s in draft.slides if s.kind == "section"]
+    if not titles:
+        return
+    try:
+        stamped = SectionArt().stamp(deck_path, titles, reference.path)
+    except Exception as exc:                                 # noqa: BLE001
+        log.warning("section artwork could not be placed (%s); the dividers keep the "
+                    "reference layout without it", exc, exc_info=True,
+                    extra={"session_id": sid})
+        return
+    if stamped:
+        _step(sid, "deck", f"Section numbers from the reference placed on {stamped} "
+                           "divider slide(s).")
 
 
 def build_graph():

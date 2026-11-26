@@ -804,7 +804,7 @@ class ReferenceDesignConstants:
     # --- Rockwell's logo on the reference (app.genai.ppt.rebrand) ------------------- #
     #: Bump when the preparation changes, so copies prepared by an older build are
     #: not reused from the cache.
-    PREPARED_VERSION = 5                    # 5: cache keyed on the file, not ""
+    PREPARED_VERSION = 6                    # 6: keeps the section artwork
     #: A picture is a logo candidate when it is this small (inches / share of slide).
     LOGO_MIN_SIDE_IN = 0.15
     LOGO_MAX_SIDE_IN = 3.6

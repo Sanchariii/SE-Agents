@@ -64,10 +64,33 @@ class ReferenceProfiler:
                    "layout_usage": dict(Counter(s["layout"] for s in slides if s["layout"])),
                    "content_usage": self._usage(slides, ("content", "takeaways", "quiz")),
                    "cover_usage": self._usage(slides, ("cover",)),
+                   "section_usage": self._usage(slides, ("section",)),
                    "cadence": self._cadence(slides)}
         log.info("reference profiled: %d slide(s), roles %s", total,
                  dict(Counter(profile["sequence"])))
         return profile
+
+    @staticmethod
+    def stored(template_path):
+        """The profile saved beside a prepared reference, or {} (none, or no reference)."""
+        import json
+        from pathlib import Path
+
+        if not template_path:
+            return {}
+        path = Path(str(template_path))
+        sidecar = path.with_name(path.stem + ".profile.json")
+        try:
+            return json.loads(sidecar.read_text()) if sidecar.is_file() else {}
+        except ValueError:
+            log.warning("reference profile %s unreadable", sidecar.name)
+            return {}
+
+    @classmethod
+    def top_layout(cls, template_path, usage_name):
+        """The most used layout key in one of the profile's usage counts, or ""."""
+        usage = cls.stored(template_path).get(usage_name) or {}
+        return max(usage, key=lambda key: (usage[key], key)) if usage else ""
 
     @staticmethod
     def _usage(slides, roles):

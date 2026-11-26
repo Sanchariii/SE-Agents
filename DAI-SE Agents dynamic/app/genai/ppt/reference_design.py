@@ -255,22 +255,34 @@ def strip_slides(data: bytes, out_path: Path, suffix: str = ".pptx") -> None:
 
 
 def profile_bytes(data, out_path, suffix=".pptx"):
-    """The structure profile of the reference, read before its slides are stripped.
+    """The structure profile and section artwork of the reference, read before its
+    slides are stripped.
 
-    Best effort: the profile only guides planning, so a deck that cannot be profiled
-    is still used for its design, with an empty profile.
+    Best effort: both only guide the build, so a deck that cannot be read this way is
+    still used for its design, with an empty profile and no section artwork.
+
+    Returns:
+        (profile dict, section artwork - one list of shape XML per section slide).
     """
+    from app.genai.ppt.reference_art import SectionArt
     from app.genai.ppt.reference_profile import ReferenceProfiler
 
     raw = out_path.with_name(out_path.stem + ".profile-source" + suffix)
     try:
         raw.write_bytes(data)
-        return ReferenceProfiler().profile(raw)
+        profile = ReferenceProfiler().profile(raw)
+        try:
+            art = SectionArt().harvest(raw, profile)
+        except Exception as exc:                             # noqa: BLE001
+            log.warning("section artwork of %s could not be read (%s)", out_path.name,
+                        exc, exc_info=True)
+            art = []
+        return profile, art
     except Exception as exc:                                 # noqa: BLE001
         log.warning("reference %s could not be profiled (%s); its design is still "
                     "used, without structure guidance", out_path.name, exc,
                     exc_info=True)
-        return {}
+        return {}, []
     finally:
         raw.unlink(missing_ok=True)
 
@@ -383,11 +395,13 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
             suffix = Path(name).suffix.lower() or ".pptx"
             try:
                 folder.mkdir(parents=True, exist_ok=True)
-                profile = profile_bytes(data, work, suffix)
+                profile, art = profile_bytes(data, work, suffix)
                 strip_slides(data, work, suffix)
                 report = rebrand_file(work)
                 report_path.write_text(json.dumps({**report.to_dict(), "sha256": digest}))
                 profile_path.write_text(json.dumps(profile))
+                from app.genai.ppt.reference_art import SectionArt
+                SectionArt.sidecar(target).write_text(json.dumps(art))
                 work.replace(target)
             finally:
                 work.unlink(missing_ok=True)
@@ -404,6 +418,59 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
              extra={"session_id": session_id})
     return Prepared(path=target, filename=name, sha256=digest, rebrand=report,
                     profile=profile), ""
+
+
+def structure_text(profile) -> str:
+    """The planner's view of a reference that opens its topics with section slides
+    (roles and counts only, never its words); "" when it has no section slides."""
+    roles = list((profile or {}).get("sequence") or [])
+    sections = roles.count("section")
+    if not sections:
+        return ""
+    every = ((profile.get("cadence") or {}).get("section_every") or 0)
+    opening = []
+    for role in roles:
+        if role in ("content", "section"):
+            break
+        opening.append(role)
+    lines = [
+        "REFERENCE DECK STRUCTURE (the user's design reference - its structure only, "
+        "never its content):",
+        f"- It groups its content into {sections} topics, each opened by a section "
+        "divider slide" + (f", with about {every} content slides per topic." if every
+                           else "."),
+    ]
+    if opening:
+        lines.append(f"- It opens with: {', '.join(opening)}.")
+    lines += [
+        '- For this deck, kind "section" is ALSO allowed: a divider slide that opens a '
+        "group of related content slides. Give it a short title (2-6 words) naming the "
+        "topic, and no key_points or content_needs.",
+        "- Group the content into topics as the reference does and open each topic with "
+        "one section slide. Section slides count toward the slide total.",
+    ]
+    return "\n".join(lines)
+
+
+def planning_block(session_id: str) -> str:
+    """`structure_text` for the session's design reference, or "" (no reference, or
+    one that cannot be read - planning then runs exactly as without a reference)."""
+    try:
+        from app.genai.agents.brief import DeckBrief
+
+        reference = getattr(DeckBrief.load(session_id), "design_reference", None) or {}
+        if not reference:
+            return ""
+        prepared, _ = prepare(session_id, reference)
+        text = structure_text(prepared.profile if prepared else {})
+    except Exception as exc:                                 # noqa: BLE001
+        log.warning("reference structure unavailable for planning (%s); planning "
+                    "without it", exc, exc_info=True, extra={"session_id": session_id})
+        return ""
+    if text:
+        log.info("planner gets the reference's section structure",
+                 extra={"session_id": session_id})
+    return text
 
 
 def with_guidance(params: dict) -> dict:

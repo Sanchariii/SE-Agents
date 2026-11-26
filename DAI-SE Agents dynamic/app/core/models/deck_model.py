@@ -14,7 +14,9 @@ from app.utilities.logger_util import get_logger
 
 log = get_logger(__name__)
 
-SlideKind = Literal["cover", "agenda", "content", "takeaways", "thanks"]
+#: "section" is a divider opening a group of content slides; the planner is offered it
+#: only when the design reference has section slides (see `reference_design`).
+SlideKind = Literal["cover", "agenda", "section", "content", "takeaways", "thanks"]
 
 
 def _now() -> datetime:
