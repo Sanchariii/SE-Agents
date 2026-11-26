@@ -460,8 +460,8 @@ def _reference_sections_on_their_layout(accepted, slides_by_number, catalog) -> 
     whatever the art director chose: that layout carries the divider's look."""
     from app.genai.ppt.reference_profile import ReferenceProfiler
 
-    key = ReferenceProfiler.top_layout(registry.template_override(), "section_usage")
-    if not key or catalog.get(key) is None:
+    key = _reference_section_layout(catalog)
+    if not key:
         return
     for number, slide in slides_by_number.items():
         if getattr(slide, "kind", "") == "section":
@@ -469,6 +469,22 @@ def _reference_sections_on_their_layout(accepted, slides_by_number, catalog) -> 
                                                layout_key=key)
             log.info("slide %d: section divider on the reference's section layout %s",
                      number, key)
+
+
+def _reference_section_layout(catalog) -> str:
+    """The reference's section layout: of those its section slides use, a dark or
+    coloured one first (a divider is there to stand out - the 2026 template has a
+    white and a gradient version), then the most used; "" when there is none."""
+    from app.genai.ppt.reference_profile import ReferenceProfiler
+
+    usage = ReferenceProfiler.stored(registry.template_override()).get("section_usage")
+    candidates = [(catalog.get(key), count) for key, count in (usage or {}).items()]
+    candidates = [(layout, count) for layout, count in candidates if layout is not None]
+    if not candidates:
+        return ""
+    layout, _ = max(candidates, key=lambda item: (item[0].background_luminance < 0.5,
+                                                  item[1], item[0].key))
+    return layout.key
 
 
 def _reference_layout_keys(catalog) -> set:

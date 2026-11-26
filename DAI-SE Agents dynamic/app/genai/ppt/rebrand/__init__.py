@@ -102,8 +102,11 @@ class Rebrander:
         def dark(owner):
             return luminance_of is not None and luminance_of(*index_of[id(owner)]) < 0.5
 
+        icon_rows = LogoFinder.in_icon_rows(found)
         has_mark = set()
         for candidate in found:
+            if id(candidate) in icon_rows and not candidate.rockwell:
+                continue
             if candidate.rockwell:
                 report.kept += 1
                 has_mark.add(id(candidate.owner))

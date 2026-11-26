@@ -63,6 +63,20 @@ class LogoFinder:
         return MarkLibrary.matches(probe, self.marks)
 
     @staticmethod
+    def in_icon_rows(found):
+        """ids of candidates sitting in a row of 3+ same-size pictures on one master or
+        layout - social-media or feature icons, which a logo never is."""
+        rows = set()
+        for candidate in found:
+            _, top, width, height = candidate.box
+            row = [other for other in found if other.owner is candidate.owner
+                   and abs(other.box[1] - top) <= 0.1 and abs(other.box[2] - width) <= 0.05
+                   and abs(other.box[3] - height) <= 0.05]
+            if len(row) >= 3:
+                rows.add(id(candidate))
+        return rows
+
+    @staticmethod
     def is_foreign(candidate, uses, masters, slide_w, slide_h):
         """Another company's logo: unrecognised and furniture - in a corner, on a
         master, or repeated across layouts (``uses`` counts distinct masters/layouts,

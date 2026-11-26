@@ -1,1 +1,213 @@
-[]
+[
+ {
+  "name": "arrow",
+  "file": "arrow.png",
+  "keywords": [
+   "growth",
+   "trend",
+   "increase",
+   "improvement",
+   "progress",
+   "next"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "bar-chart",
+  "file": "bar-chart.png",
+  "keywords": [
+   "chart",
+   "growth",
+   "metrics",
+   "kpi",
+   "performance",
+   "results",
+   "analytics"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "calendar",
+  "file": "calendar.png",
+  "keywords": [
+   "date",
+   "schedule",
+   "plan",
+   "deadline",
+   "month",
+   "week",
+   "timeline"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "clock",
+  "file": "clock.png",
+  "keywords": [
+   "time",
+   "schedule",
+   "duration",
+   "hours",
+   "deadline",
+   "timing",
+   "minutes"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "cloud",
+  "file": "cloud.png",
+  "keywords": [
+   "saas",
+   "online",
+   "internet",
+   "hosting",
+   "storage"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "data",
+  "file": "data.png",
+  "keywords": [
+   "signal",
+   "information",
+   "analytics",
+   "stream",
+   "digital"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "enterprise",
+  "file": "enterprise.png",
+  "keywords": [
+   "company",
+   "corporate",
+   "organization",
+   "headquarters",
+   "business",
+   "office"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "group",
+  "file": "group.png",
+  "keywords": [
+   "team",
+   "people",
+   "employees",
+   "workers",
+   "crew",
+   "audience",
+   "stakeholders"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "hardware",
+  "file": "hardware.png",
+  "keywords": [
+   "controller",
+   "plc",
+   "rack",
+   "device",
+   "module",
+   "electrical"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "line",
+  "file": "line.png",
+  "keywords": [
+   "production",
+   "assembly",
+   "conveyor",
+   "manufacturing",
+   "process",
+   "workflow"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "machine",
+  "file": "machine.png",
+  "keywords": [
+   "equipment",
+   "machinery",
+   "press",
+   "motor",
+   "tank",
+   "mixer",
+   "asset"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "person",
+  "file": "person.png",
+  "keywords": [
+   "people",
+   "employee",
+   "worker",
+   "operator",
+   "user",
+   "technician",
+   "staff"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "person-alt",
+  "file": "person-alt.png",
+  "keywords": [
+   "people",
+   "employee",
+   "worker",
+   "operator",
+   "user",
+   "staff"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "person-robot",
+  "file": "person-robot.png",
+  "keywords": [
+   "robot",
+   "robotics",
+   "automation",
+   "cobot",
+   "collaboration",
+   "operator"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "plant",
+  "file": "plant.png",
+  "keywords": [
+   "factory",
+   "site",
+   "facility",
+   "manufacturing",
+   "building"
+  ],
+  "category": "brand-2026"
+ },
+ {
+  "name": "software",
+  "file": "software.png",
+  "keywords": [
+   "application",
+   "computer",
+   "screen",
+   "monitor",
+   "dashboard",
+   "hmi"
+  ],
+  "category": "brand-2026"
+ }
+]

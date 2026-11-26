@@ -264,3 +264,19 @@ def test_the_supplied_reference_decks_end_up_with_a_rockwell_logo_on_every_layou
                       for s, box in Geometry.pictures(layout.shapes)
                       if Geometry.is_logo_sized(box, width, height))
             assert own or (master_mark and Geometry.shows_master_shapes(layout)), layout.name
+
+
+def test_a_row_of_social_icons_is_not_mistaken_for_a_logo():
+    """Seen on the 2026 template: four 0.22in social icons repeated on three
+    'Thank you' layouts were swapped for the Rockwell mark."""
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    layouts = list(prs.slide_masters[0].slide_layouts)[:3]
+    for layout in layouts:
+        for i in range(4):
+            _picture(layout, _png(lambda d, i=i: d.ellipse((0, 0, 20 + i, 20)),
+                                  size=(24, 24)), 6.0 + 0.5 * i, 6.9, 0.22, 0.22)
+
+    report = Rebrander(marks=(), icons=()).run(prs)
+
+    assert report.replaced == 0

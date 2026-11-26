@@ -167,6 +167,11 @@ def brand_palette(theme_colors: Optional[Dict[str, str]]) -> Dict[str, str]:
     # The quiz answer tint follows whatever green the theme resolved to.
     palette[ANSWER_FILL_TOKEN] = _lum_mod_off(palette["green"], _ANSWER_LUM_MOD,
                                               _ANSWER_LUM_OFF)
+    # The theme's own slot names ("accent1") are aliases of the tokens they back, so a
+    # program that names a theme colour the standard way gets the same colour instead
+    # of an error and a wasted attempt.
+    for scheme_name, brand_name in THEME_TO_BRAND.items():
+        palette.setdefault(scheme_name, palette[brand_name])
     if not overridden:
         # Every token is a hardcoded default, so the deck is not following the
         # template's theme at all - and rule 8 will be checking against those
