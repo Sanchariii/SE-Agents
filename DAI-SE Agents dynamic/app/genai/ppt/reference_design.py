@@ -348,14 +348,22 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
     name = reference.get("filename") or "the reference deck"
     digest = reference.get("sha256") or ""
     folder = cache_dir or Path(tempfile.gettempdir()) / C.CACHE_DIRNAME
+    # Uploads made through the web app's direct-to-Blob path carry no checksum, so the
+    # cache is keyed on the file's identity then - never on an empty hash, which made
+    # every such reference share one cache entry (the first deck prepared won).
+    identity = digest or "|".join(str(reference.get(key) or "") for key in
+                                  ("doc_id", "version", "storage_path"))
     try:
-        target = folder / (f"{hashlib.sha1(digest.encode()).hexdigest()[:16]}"
+        if not identity.strip("|"):
+            raise ValueError("the reference has no checksum and no stored location")
+        target = folder / (f"{hashlib.sha1(identity.encode()).hexdigest()[:16]}"
                            f"-v{C.PREPARED_VERSION}.pptx")
         report_path = target.with_suffix(".json")
         profile_path = target.with_name(target.stem + ".profile.json")
         if target.is_file():
-            report = RebrandReport.from_dict(
-                json.loads(report_path.read_text()) if report_path.is_file() else {})
+            stored = json.loads(report_path.read_text()) if report_path.is_file() else {}
+            report = RebrandReport.from_dict(stored)
+            digest = digest or stored.get("sha256") or ""
             profile = (json.loads(profile_path.read_text())
                        if profile_path.is_file() else {})
         else:
@@ -378,7 +386,7 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
                 profile = profile_bytes(data, work, suffix)
                 strip_slides(data, work, suffix)
                 report = rebrand_file(work)
-                report_path.write_text(json.dumps(report.to_dict()))
+                report_path.write_text(json.dumps({**report.to_dict(), "sha256": digest}))
                 profile_path.write_text(json.dumps(profile))
                 work.replace(target)
             finally:
@@ -392,7 +400,7 @@ def prepare(session_id: str, reference: dict, read_bytes=None,
                     extra={"session_id": session_id})
         return None, (f"The design of {name} could not be used ({exc}); the deck was "
                       "built on the Rockwell template instead.")
-    log.info("reference design ready: %s -> %s", name, target.name,
+    log.info("reference design ready: %s (sha %s) -> %s", name, digest[:12], target.name,
              extra={"session_id": session_id})
     return Prepared(path=target, filename=name, sha256=digest, rebrand=report,
                     profile=profile), ""

@@ -359,3 +359,33 @@ def test_a_newer_reference_wins_even_when_the_older_one_is_called_a_template(sto
 
     assert "D2R ILT - Account Planning.pptx" in note
     assert _reference_of("s1")["doc_id"] == ilt.doc_id
+
+
+def test_references_uploaded_without_a_checksum_do_not_share_a_cache_entry(tmp_path):
+    """Seen in testing: web-app uploads store sha256="", so every reference was cached
+    under the same name and the first deck prepared was reused for every later one."""
+    def deck(title, path):
+        prs = Presentation()
+        prs.slides.add_slide(prs.slide_layouts[0]).shapes.title.text = title
+        prs.slide_masters[0].slide_layouts[0].name = title
+        prs.save(str(path))
+        return path.read_bytes()
+
+    first = deck("FIRST", tmp_path / "a.pptx")
+    second = deck("SECOND", tmp_path / "b.pptx")
+    cache = tmp_path / "cache"
+    record = {"doc_id": "doc-a", "version": 1, "filename": "Job aid.pptx", "sha256": "",
+              "storage_path": "s/a"}
+    one, _ = rd.prepare("s", record, read_bytes=lambda _p: first, cache_dir=cache)
+    two, _ = rd.prepare("s", {**record, "doc_id": "doc-b", "filename": "ILT.pptx",
+                              "storage_path": "s/b"},
+                        read_bytes=lambda _p: second, cache_dir=cache)
+
+    assert one.path != two.path
+    assert Presentation(str(two.path)).slide_masters[0].slide_layouts[0].name == "SECOND"
+    assert one.sha256 == hashlib.sha256(first).hexdigest()
+    assert two.cache_key != one.cache_key
+    again, _ = rd.prepare("s", {**record, "doc_id": "doc-b", "filename": "ILT.pptx",
+                                "storage_path": "s/b"},
+                          read_bytes=lambda _p: b"never read", cache_dir=cache)
+    assert again.sha256 == two.sha256                         # remembered on a cache hit
