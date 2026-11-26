@@ -28,6 +28,9 @@ from typing import Any, Iterable, Optional, Sequence
 from app.config.constants import GeometryConstants as GC
 from app.utilities.logger_util import get_logger
 
+#: Mirrors `deck_builder.ICON_SHAPE_PREFIX`: pre-built icons, which may repeat.
+_ICON_SHAPE_PREFIX = "icon:"
+
 log = get_logger(__name__)
 
 #: Text the template leaves in an untouched placeholder. Rule 7.
@@ -374,6 +377,9 @@ def boxes_from_slide(slide: Any, layout: Any) -> list[Box]:
         explicit = _font_size(shape)
         picture = _is_picture(shape)
         image_key, aspect_error = _image_facts(shape) if picture else ("", 0.0)
+        if str(getattr(shape, "name", "")).startswith(_ICON_SHAPE_PREFIX):
+            # A pre-built icon may repeat (one per card), so rule 13 never counts it.
+            image_key = ""
         try:
             is_textbox = shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX
         except Exception:                                    # noqa: BLE001

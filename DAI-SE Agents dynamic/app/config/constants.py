@@ -846,6 +846,7 @@ class PptConstants:
     """Company brand-template deck rendering."""
     TEMPLATE_DIR = "company-ppt-templet"            # relative to project root
     LOGO_DIR = "logos"                              # approved brand marks, under TEMPLATE_DIR
+    ICONS_PER_SLIDE = 5                             # icons offered to one slide's designer
     DEFAULT_CLASSIFICATION = "internal"
     CLASSIFICATIONS = ("public", "internal", "confidential", "restricted", "cobranded")
 

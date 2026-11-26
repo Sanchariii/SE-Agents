@@ -65,6 +65,7 @@ from app.genai.ppt import (
     code_guard, deck_builder, deck_design, geometry as geo, layout_plan, measure,
     sandbox, slide_render,
 )
+from app.genai.ppt.icons import IconLibrary
 from app.genai.ppt.template import catalog as catalog_mod, registry
 from app.utilities import events_util as events, run_control, storage_util as storage
 from app.utilities.apim_llm_utils import get_apim_llm_client, image_block
@@ -379,6 +380,12 @@ def image_block_text(brief: SlideCodeBrief) -> str:
              len(brief.image_paths),
              "requested" if brief.images_requested else "optional assets")
     return "\n".join(lines) + "\n" + note
+
+
+def _icons_for(brief) -> list:
+    """The few library icons that match this slide's words ([] for an empty library)."""
+    return IconLibrary.default().search(f"{brief.content.title} "
+                                        f"{content_json(brief.content)}")
 
 
 def content_json(content: SlideDraft) -> str:
@@ -753,6 +760,9 @@ class PptCreatorAgent:
             content_json=content_json(brief.content),
             image_block=image_block,
             direction_block=self._direction_block(brief, family, tier=1))
+        # Appended only when the icon library offers something, so with no icons the
+        # prompt is byte-identical to what it was.
+        text += IconLibrary.prompt_block(_icons_for(brief))
         log.info("slide %d assigned %s mode on layout %s; prompt is %d chars, "
                  "%d image(s), free_region=%s", brief.slide_number, brief.mode,
                  brief.layout_key or "(unassigned)", len(text),
@@ -1849,6 +1859,7 @@ class PptCreatorAgent:
             max_brief = self._max_mode_brief(brief, catalog, family)
         staged = max_brief or brief
         sandbox.stage(slide_dir, catalog, self._stage_fields(staged), staged.image_paths)
+        IconLibrary.stage(_icons_for(staged), slide_dir)
         out_path = sandbox.output_path(slide_dir)
         code_path = slide_dir / PptCreatorConstants.GENERATED_CODE_FILENAME
 
@@ -2636,6 +2647,7 @@ class PptCreatorAgent:
             "mode": answer.mode, "layout_key": answer.layout_key,
             "free_region": answer.free_region}, answer.image_paths,
             reveal_answers=True)
+        IconLibrary.stage(_icons_for(answer), slide_dir)
         code_path = slide_dir / PptCreatorConstants.GENERATED_CODE_FILENAME
         # The program may name its own sandbox by absolute path; point it at this one,
         # so it can never overwrite the question's file.

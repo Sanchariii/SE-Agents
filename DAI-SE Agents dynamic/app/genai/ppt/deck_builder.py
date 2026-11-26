@@ -364,6 +364,12 @@ CANVAS_PANEL_COVERAGE = 0.90
 #: exported rather than duplicated so the two modules cannot drift.
 FRAME_SHAPE_PREFIX = "frame:"
 
+#: Pre-built icons placed by `add_icon` are named with this prefix. The same icon may
+#: appear several times on a slide, which the gate's repeated-image rule allows only
+#: for these. Mirrored from `app.genai.ppt.icons` (this module imports nothing from app).
+ICON_SHAPE_PREFIX = "icon:"
+ICON_DIRNAME = "icons"
+
 
 def logo_variant_for(background_luminance: float) -> str:
     """Which logo variant reads on this background. Mechanical, not the model's guess.
@@ -1985,6 +1991,46 @@ class SlideHandle:
                      Emu(pic.width).inches, Emu(pic.height).inches,
                      file=Path(str(file_path)).name,
                      asked=f"{width or 0:.2f}x{height or 0:.2f}in")
+        return pic
+
+    def add_icon(self, name: str, left: float, top: float, size: float = 0.6,
+                 color: str = "red") -> Any:
+        """A pre-built Rockwell icon from the slide's icon menu, recoloured.
+
+        Args:
+            name: An icon name the prompt offered (staged as icons/<name>.png).
+            left: Inches from the left edge.
+            top: Inches from the top edge.
+            size: The square box the icon is fitted into, in inches.
+            color: A brand or theme colour token.
+
+        Returns:
+            The created picture, or None when the icon was not offered - a warning,
+            never a crash.
+        """
+        relative = f"{ICON_DIRNAME}/{name}.png"
+        file_path = (self.deck.resolve_asset(relative)
+                     or Path(__file__).resolve().parent / relative)
+        if not file_path.is_file():
+            self._warn(f"icon '{name}' is not in this slide's icon menu - skipped")
+            return None
+        self._record("icon", False)
+        pic = self.slide.shapes.add_picture(str(file_path), Inches(left), Inches(top),
+                                            height=Inches(size))
+        if pic.width > Inches(size):
+            ratio = pic.height / pic.width
+            pic.width = Inches(size)
+            pic.height = int(Inches(size) * ratio)
+        pic.left = Inches(left) + int((Inches(size) - pic.width) / 2)
+        pic.top = Inches(top) + int((Inches(size) - pic.height) / 2)
+        pic.name = f"{ICON_SHAPE_PREFIX}{name}"
+        rgb = str(to_rgb(color, self.deck.brand))
+        blip = pic._element.blipFill.find(qn("a:blip"))
+        duotone = etree.SubElement(blip, qn("a:duotone"))
+        for _ in range(2):          # both ends one colour: a single-colour icon
+            etree.SubElement(duotone, qn("a:srgbClr")).set("val", rgb)
+        self._placed("icon", Emu(pic.left).inches, Emu(pic.top).inches,
+                     Emu(pic.width).inches, Emu(pic.height).inches, file=name)
         return pic
 
     def add_table(self, columns: Sequence[str], rows: Sequence[Sequence[Any]],
