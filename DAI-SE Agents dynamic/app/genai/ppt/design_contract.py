@@ -19,6 +19,7 @@ from typing import Callable, Optional
 
 from app.config.constants import (
     GeometryConstants as GC, ModelConstants, PptCreatorConstants,
+    ReferenceDesignConstants,
 )
 from app.core.models.deck_model import DeckDraft, DeckPlan
 from app.genai.ppt import deck_builder as builder
@@ -110,7 +111,10 @@ def frame_for_layout(classification: str, slide_width: float, slide_height: floa
     """
     luminance = getattr(layout, "background_luminance", 1.0)
     variant = builder.logo_variant_for(luminance)
-    logo_file = "d2r_mark_white.png" if variant == "white" else "d2r_mark.png"
+    # Rockwell's lockup by default; a slide about D2R gets the D2R mark instead, once
+    # its content is known (``program_mark.ProgramMark.brand_file``).
+    logo_file = (ReferenceDesignConstants.LOCKUP_WHITE if variant == "white"
+                 else ReferenceDesignConstants.LOCKUP_COLOR)
     # A reference deck already carries Rockwell's logo in its layouts
     # (`app.genai.ppt.rebrand`), often in the corner the frame would stamp; a second mark
     # there would sit on top of it.

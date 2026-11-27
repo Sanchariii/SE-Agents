@@ -34,7 +34,7 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.oxml.ns import qn
 
-from app.config.constants import GeometryConstants
+from app.config.constants import GeometryConstants, ReferenceDesignConstants
 from app.genai.ppt import measure
 from app.genai.ppt.template import registry
 from app.genai.ppt.template.loader import open_presentation
@@ -660,6 +660,9 @@ class TemplateCatalog:
         hc_layouts: list[LayoutInfo] = []
         for mi, master in enumerate(masters):
             for li, layout in enumerate(master.slide_layouts):
+                if (layout.name or "").strip().endswith(
+                        ReferenceDesignConstants.PROGRAM_LAYOUT_SUFFIX):
+                    continue        # a reference's hidden D2R twin (rebrand.twins)
                 titles = usage.get((mi, li), [])
                 info = _read_layout(layout, mi, li, themes[mi], txstyles[mi],
                                     slide_w, slide_h, titles)

@@ -1487,6 +1487,7 @@ def _collect(state: WorkflowState) -> dict:
                 slide_files, artifacts, design_gaps = _design_slides(
                     sid, draft, plan, workdir, contract, enrichment, reference)
                 gaps += design_gaps
+                slide_files = _brand_slide_files(sid, slide_files, draft, workdir)
                 stitcher = DeckStitcher(sid)
                 deck_path = stitcher.stitch(slide_files, workdir / "deck.pptx")
                 gaps += stitcher.notes
@@ -1617,6 +1618,25 @@ def _after_planning(state: WorkflowState) -> str:
 
 def _after_collect(state: WorkflowState) -> str:
     return "publish" if state.get("pending_publish") else "done"
+
+
+def _brand_slide_files(sid, slide_files, draft, workdir):
+    """Each slide's logo for its content: D2R on slides about D2R, else Rockwell's.
+    Best effort per slide: a file that cannot be changed is stitched as it is."""
+    from app.genai.ppt.program_mark import ProgramMark
+
+    marks = ProgramMark()
+    by_number = dict(enumerate(draft.slides, start=1))   # numbered by position
+    branded = []
+    for number, path in slide_files:
+        try:
+            path = marks.brand_file(path, by_number.get(number), workdir / "branded")
+        except Exception as exc:                             # noqa: BLE001
+            log.warning("slide %d: logo could not be set for its content (%s); kept "
+                        "as built", number, exc, exc_info=True,
+                        extra={"session_id": sid})
+        branded.append((number, path))
+    return branded
 
 
 def _stamp_section_art(sid, deck_path, draft, reference) -> None:

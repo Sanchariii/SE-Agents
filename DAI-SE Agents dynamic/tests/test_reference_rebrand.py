@@ -16,7 +16,7 @@ from pptx.util import Inches
 
 from app.config.constants import PptConstants, ReferenceDesignConstants as C
 from app.genai.ppt import design_contract, reference_design as rd
-from app.genai.ppt.rebrand import Geometry, MarkLibrary, Rebrander
+from app.genai.ppt.rebrand import Geometry, LayoutTwin, MarkLibrary, Rebrander
 from app.genai.ppt.rebrand.placer import R_EMBED
 from app.genai.ppt.template import catalog as catalog_mod, registry
 
@@ -295,6 +295,8 @@ def test_the_supplied_reference_decks_end_up_with_a_rockwell_logo_on_every_layou
                           for s, box in Geometry.pictures(master.shapes)
                           if Geometry.is_logo_sized(box, width, height))
         for layout in master.slide_layouts:
+            if LayoutTwin.is_twin(layout):
+                continue                # shown only on slides about D2R
             own = any(_is_rockwell(s, marks)
                       for s, box in Geometry.pictures(layout.shapes)
                       if Geometry.is_logo_sized(box, width, height))

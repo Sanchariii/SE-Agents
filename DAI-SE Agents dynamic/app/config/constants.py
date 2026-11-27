@@ -805,7 +805,7 @@ class ReferenceDesignConstants:
     # --- Rockwell's logo on the reference (app.genai.ppt.rebrand) ------------------- #
     #: Bump when the preparation changes, so copies prepared by an older build are
     #: not reused from the cache.
-    PREPARED_VERSION = 8                    # 8: D2R programme marks removed
+    PREPARED_VERSION = 9                    # 9: D2R twins of layouts
     #: A picture is a logo candidate when it is this small (inches / share of slide).
     LOGO_MIN_SIDE_IN = 0.15
     LOGO_MAX_SIDE_IN = 3.6
@@ -843,6 +843,12 @@ class ReferenceDesignConstants:
     MARK_SHAPE_NAME = "Rockwell logo"
     #: Logo files of programme marks (D2R): recognised, but removed from a reference.
     PROGRAM_MARK_PREFIXES = ("d2r",)
+    #: The D2R mark goes only on a slide whose content matches this.
+    PROGRAM_TOPIC_PATTERN = r"\bD\s?-?\s?2\s?-?\s?R\b"
+    PROGRAM_MARK = "d2r_mark.png"
+    PROGRAM_MARK_WHITE = "d2r_mark_white.png"
+    #: Name suffix of a layout's hidden D2R twin (``rebrand.twins``).
+    PROGRAM_LAYOUT_SUFFIX = "(D2R)"
 
 
 class PptConstants:

@@ -10,6 +10,8 @@ every layout showing Rockwell's logo and no other company's:
 2. Another company's logo - unrecognised and in a corner, on a master or repeated - is
    swapped in place for the Rockwell mark that fits its box (``MarkPlacer.replace``).
 3. A layout still showing no logo gets one in the first free spot (``MarkPlacer.add``).
+4. D2R programme marks are taken off too, but a layout that had one is first copied as
+   a hidden "(D2R)" twin (``LayoutTwin``), which slides about D2R are moved onto.
 
 The frame then adds no mark of its own on a reference deck
 (``design_contract.frame_for_layout``), so a slide never shows two logos.
@@ -20,12 +22,13 @@ from app.genai.ppt.rebrand.finder import LogoFinder
 from app.genai.ppt.rebrand.geometry import EMU_PER_IN, Geometry
 from app.genai.ppt.rebrand.marks import MarkLibrary
 from app.genai.ppt.rebrand.placer import MarkPlacer
+from app.genai.ppt.rebrand.twins import LayoutTwin
 from app.utilities.logger_util import get_logger
 
 log = get_logger(__name__)
 
-__all__ = ["Geometry", "LogoFinder", "MarkLibrary", "MarkPlacer", "RebrandReport",
-           "Rebrander"]
+__all__ = ["Geometry", "LayoutTwin", "LogoFinder", "MarkLibrary", "MarkPlacer",
+           "RebrandReport", "Rebrander"]
 
 
 class RebrandReport:
@@ -89,13 +92,16 @@ class Rebrander:
         """
         slide_w, slide_h = prs.slide_width / EMU_PER_IN, prs.slide_height / EMU_PER_IN
         report, placer = RebrandReport(), MarkPlacer(slide_w, slide_h)
-        found = LogoFinder(self.marks, self.icons, self.program).find(prs, slide_w,
-                                                                      slide_h)
+        finder = LogoFinder(self.marks, self.icons, self.program)
+        found = finder.find(prs, slide_w, slide_h)
+        masters = {id(m) for m in prs.slide_masters}
+        twinned = self._twin(prs, found, masters)
+        if twinned:
+            found = finder.find(prs, slide_w, slide_h)
         owners = {}
         for candidate in found:
             owners.setdefault(candidate.digest, set()).add(id(candidate.owner))
         uses = {digest: len(ids) for digest, ids in owners.items()}
-        masters = {id(m) for m in prs.slide_masters}
         index_of = {}
         for mi, master in enumerate(prs.slide_masters):
             index_of[id(master)] = (mi, None)
@@ -111,6 +117,8 @@ class Rebrander:
         for candidate in found:
             if id(candidate) in icon_rows and not candidate.rockwell:
                 continue
+            if LayoutTwin.is_twin(candidate.owner):
+                continue                    # a twin keeps the reference's marks as they are
             if candidate.program and id(candidate.owner) in with_rockwell:
                 # A Rockwell mark is already there (the RA lockup under a D2R ribbon).
                 candidate.shape._element.getparent().remove(candidate.shape._element)
@@ -140,6 +148,8 @@ class Rebrander:
 
         for mi, master in enumerate(prs.slide_masters):
             for li, layout in enumerate(master.slide_layouts):
+                if LayoutTwin.is_twin(layout):
+                    continue
                 if id(layout) in has_mark or (id(master) in has_mark
                                               and Geometry.shows_master_shapes(layout)):
                     continue
@@ -154,6 +164,23 @@ class Rebrander:
                     log.warning("layout M%d-L%d %r has no logo and no free spot for one",
                                 mi, li, layout.name)
         log.info("reference rebrand: %d Rockwell mark(s) kept, %d other logo(s) replaced, "
-                 "%d added, %d layout(s) without room", report.kept, report.replaced,
-                 report.added, len(report.no_room))
+                 "%d added, %d layout(s) without room, %d D2R twin(s)", report.kept,
+                 report.replaced, report.added, len(report.no_room), twinned)
         return report
+
+    @staticmethod
+    def _twin(prs, found, masters):
+        """Copy every layout carrying a D2R mark as its hidden twin, before the marks
+        are taken off. A mark on a master is not twinned: it just goes."""
+        icon_rows = LogoFinder.in_icon_rows(found)
+        owners = []
+        for candidate in found:
+            if (candidate.program and id(candidate) not in icon_rows
+                    and id(candidate.owner) not in masters
+                    and not LayoutTwin.is_twin(candidate.owner)
+                    and all(o is not candidate.owner for o in owners)):
+                owners.append(candidate.owner)
+        for layout in owners:
+            if LayoutTwin.find(layout) is None:
+                LayoutTwin.make(prs, layout)
+        return len(owners)
