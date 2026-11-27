@@ -88,6 +88,16 @@ def _name_words(text):
             if len(w) >= 3 and w not in _GENERIC_NAME_WORDS}
 
 
+def _stored(record) -> bool:
+    """The file is in storage. A deck whose TEXT could not be extracted ("failed") is
+    still a usable design; only one that never finished uploading is not."""
+    status = str(getattr(record, "status", "")).split(".")[-1]
+    path = str(getattr(record, "storage_path", "") or "")
+    if status == "upload_in_progress" or path in ("", "pending"):
+        return False
+    return status != "failed" or bool(path)
+
+
 def pick_reference(records, message=""):
     """The uploaded deck to copy the design of.
 
@@ -96,7 +106,7 @@ def pick_reference(records, message=""):
     decks (e.g. "D2R") does not single one out.
     """
     decks = [r for r in records if getattr(r, "is_latest", True) and is_deck(r)
-             and str(getattr(r, "status", "")).split(".")[-1] != "failed"]
+             and _stored(r)]
     if not decks:
         return None
     said = _name_words(message)

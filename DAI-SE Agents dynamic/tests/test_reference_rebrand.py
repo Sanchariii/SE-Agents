@@ -117,10 +117,16 @@ def _blobs(owner) -> list[bytes]:
 
 # --- recognising Rockwell's marks --------------------------------------------------- #
 @pytest.mark.parametrize("name", ["ra_mark.png", "ra_lockup_color.png",
-                                  "ra_lockup_white.png", "recognised/d2r_ribbon.png",
-                                  "d2r_mark.png"])
+                                  "ra_lockup_white.png"])
 def test_rockwell_marks_are_recognised(name):
     assert MarkLibrary.is_rockwell((LOGOS / name).read_bytes())
+
+
+@pytest.mark.parametrize("name", ["recognised/d2r_ribbon.png", "d2r_mark.png"])
+def test_d2r_marks_are_programme_marks_not_rockwell_marks(name):
+    probe = MarkLibrary.fingerprint((LOGOS / name).read_bytes())
+    assert MarkLibrary.matches(probe, MarkLibrary.program_marks())
+    assert not MarkLibrary.is_rockwell((LOGOS / name).read_bytes())
 
 
 def test_a_resized_rockwell_mark_is_still_recognised():
@@ -184,6 +190,35 @@ def test_a_rockwell_logo_already_there_is_kept_and_nothing_is_added(tmp_path):
 
     assert (report.kept, report.replaced, report.added) == (1, 0, 0)
     assert report.note() == ""
+
+
+def test_a_d2r_mark_beside_a_rockwell_mark_is_removed():
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    master = prs.slide_masters[0]
+    _picture(master, (LOGOS / "ra_lockup_color.png").read_bytes(), 0.3, 6.8, 1.6, 0.4)
+    _picture(master, (LOGOS / "recognised/d2r_ribbon.png").read_bytes(),
+             11.5, 0.2, 1.5, 0.5)
+
+    report = Rebrander().run(prs)
+
+    assert (report.kept, report.removed, report.replaced) == (1, 1, 0)
+    assert all(MarkLibrary.is_rockwell(b) for b in _blobs(master))
+
+
+def test_a_d2r_mark_alone_is_swapped_for_the_rockwell_mark_in_place():
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    layout = prs.slide_masters[0].slide_layouts[6]
+    layout.element.set("showMasterSp", "0")
+    _picture(layout, (LOGOS / "d2r_mark.png").read_bytes(), 5.0, 3.0, 1.2, 1.2)
+
+    report = Rebrander().run(prs)
+
+    assert report.replaced >= 1 and report.removed == 0
+    (mark,) = _marks_on(layout)
+    assert MarkLibrary.is_rockwell(mark.image.blob)
+    assert abs(mark.left / 914400 - 5.0) < 1.0
 
 
 def test_a_layout_with_a_full_width_title_gets_the_lockup_in_the_footer():

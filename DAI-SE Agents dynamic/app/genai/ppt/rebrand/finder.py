@@ -11,11 +11,12 @@ log = get_logger(__name__)
 class LogoCandidate:
     """A logo-sized picture on a master or layout."""
 
-    def __init__(self, owner, shape, box, rockwell, digest):
+    def __init__(self, owner, shape, box, rockwell, digest, program=False):
         self.owner = owner              # the master or layout it is drawn on
         self.shape = shape
         self.box = box                  # on the slide, inches
-        self.rockwell = rockwell
+        self.rockwell = rockwell        # a Rockwell mark, kept
+        self.program = program          # a programme mark (D2R), removed or swapped
         self.digest = digest
 
 
@@ -27,9 +28,10 @@ class LogoFinder:
         icons: Classification-symbol fingerprints; ``MarkLibrary.policy_icons()``.
     """
 
-    def __init__(self, marks=None, icons=None):
+    def __init__(self, marks=None, icons=None, program=None):
         self.marks = MarkLibrary.known_marks() if marks is None else marks
         self.icons = MarkLibrary.policy_icons() if icons is None else icons
+        self.program = MarkLibrary.program_marks() if program is None else program
 
     def find(self, prs, slide_w, slide_h):
         """The candidates, groups included. Classification symbols are left out."""
@@ -51,15 +53,19 @@ class LogoFinder:
                         log.debug("picture %r is a classification symbol; left as it "
                                   "is", shape.name)
                         continue
-                    found.append(LogoCandidate(owner, shape, box, verdicts[digest],
-                                               digest))
+                    verdict = verdicts[digest]
+                    found.append(LogoCandidate(owner, shape, box, verdict is True, digest,
+                                               program=verdict == "program"))
         return found
 
     def _verdict(self, blob):
-        """None for a classification symbol, else whether it is a Rockwell mark."""
+        """None for a classification symbol, "program" for a programme mark, else
+        whether it is a Rockwell mark."""
         probe = MarkLibrary.fingerprint(blob)
         if MarkLibrary.matches(probe, self.icons):
             return None
+        if MarkLibrary.matches(probe, self.program):
+            return "program"
         return MarkLibrary.matches(probe, self.marks)
 
     @staticmethod
@@ -82,7 +88,7 @@ class LogoFinder:
         master, or repeated across layouts (``uses`` counts distinct masters/layouts,
         so a row of icons on one slide is not "repeated"). A one-off picture mid-slide
         is the design's artwork and is left alone."""
-        if candidate.rockwell:
+        if candidate.rockwell or candidate.program:
             return False
         return (Geometry.in_corner(candidate.box, slide_w, slide_h)
                 or id(candidate.owner) in masters

@@ -93,12 +93,13 @@ class XlsxExtractor:
 
 class PptxExtractor:
     name = "pptx_extractor"
-    mime_types = ("application/vnd.openxmlformats-officedocument.presentationml.presentation",)
+    mime_types = ("application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                  "application/vnd.openxmlformats-officedocument.presentationml.template")
 
     def extract(self, data, record):
-        from pptx import Presentation
+        from app.genai.ppt.template.loader import open_presentation_bytes
         units = []
-        prs = Presentation(io.BytesIO(data))
+        prs = open_presentation_bytes(data)          # .potx templates open too
         for i, slide in enumerate(prs.slides, start=1):
             texts, title = [], ""
             for shape in slide.shapes:

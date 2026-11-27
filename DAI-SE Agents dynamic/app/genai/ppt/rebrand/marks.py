@@ -13,6 +13,7 @@ class MarkLibrary:
     """Fingerprints of Rockwell's logos and classification symbols, built once."""
 
     _known = None
+    _program = None
     _icons = None
     _aspects = {}
 
@@ -66,12 +67,30 @@ class MarkLibrary:
         if cls._known is None:
             from app.genai.ppt.template import registry
 
-            root = registry.template_root() / PptConstants.LOGO_DIR
-            found = [cls.fingerprint(p.read_bytes()) for p in sorted(root.rglob("*.png"))]
+            found = [cls.fingerprint(p.read_bytes()) for p in cls._logo_files(False)]
             found += cls._template_marks()
             cls._known = tuple(mark for mark in found if mark)
             log.info("%d Rockwell mark fingerprint(s) loaded", len(cls._known))
         return cls._known
+
+    @classmethod
+    def program_marks(cls):
+        """Programme marks such as D2R (files named ``d2r*``): Rockwell's own, but tied
+        to one programme, so a reference's copies are removed rather than kept on a
+        deck that is not about that programme."""
+        if cls._program is None:
+            found = [cls.fingerprint(p.read_bytes()) for p in cls._logo_files(True)]
+            cls._program = tuple(mark for mark in found if mark)
+            log.info("%d programme mark fingerprint(s) loaded", len(cls._program))
+        return cls._program
+
+    @staticmethod
+    def _logo_files(program):
+        from app.genai.ppt.template import registry
+
+        root = registry.template_root() / PptConstants.LOGO_DIR
+        return [p for p in sorted(root.rglob("*.png"))
+                if p.name.lower().startswith(C.PROGRAM_MARK_PREFIXES) == program]
 
     @classmethod
     def _template_marks(cls):

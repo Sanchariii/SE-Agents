@@ -31,21 +31,23 @@ __all__ = ["Geometry", "LogoFinder", "MarkLibrary", "MarkPlacer", "RebrandReport
 class RebrandReport:
     """What the rebrand changed, for the log and the user's progress note."""
 
-    def __init__(self, kept=0, replaced=0, added=0, no_room=None):
+    def __init__(self, kept=0, replaced=0, added=0, no_room=None, removed=0):
         self.kept = kept                    # Rockwell marks already in the design
         self.replaced = replaced            # other logos swapped for a Rockwell mark
         self.added = added                  # layouts that had no logo and got one
         self.no_room = list(no_room or [])  # layouts left without a mark
+        self.removed = removed              # programme marks dropped beside a Rockwell one
 
     def to_dict(self):
         return {"kept": self.kept, "replaced": self.replaced, "added": self.added,
-                "no_room": list(self.no_room)}
+                "no_room": list(self.no_room), "removed": self.removed}
 
     @classmethod
     def from_dict(cls, data):
         data = data or {}
         return cls(int(data.get("kept", 0)), int(data.get("replaced", 0)),
-                   int(data.get("added", 0)), data.get("no_room", ()))
+                   int(data.get("added", 0)), data.get("no_room", ()),
+                   int(data.get("removed", 0)))
 
     def note(self):
         """One line for the user, or "" when nothing about the logos changed."""
@@ -72,8 +74,8 @@ class Rebrander:
         icons: Classification-symbol fingerprints (tests); ``policy_icons()`` otherwise.
     """
 
-    def __init__(self, marks=None, icons=None):
-        self.marks, self.icons = marks, icons
+    def __init__(self, marks=None, icons=None, program=None):
+        self.marks, self.icons, self.program = marks, icons, program
 
     def run(self, prs, luminance_of=None, shade_of=None):
         """Rebrand ``prs`` in place and return a ``RebrandReport``.
@@ -87,7 +89,8 @@ class Rebrander:
         """
         slide_w, slide_h = prs.slide_width / EMU_PER_IN, prs.slide_height / EMU_PER_IN
         report, placer = RebrandReport(), MarkPlacer(slide_w, slide_h)
-        found = LogoFinder(self.marks, self.icons).find(prs, slide_w, slide_h)
+        found = LogoFinder(self.marks, self.icons, self.program).find(prs, slide_w,
+                                                                      slide_h)
         owners = {}
         for candidate in found:
             owners.setdefault(candidate.digest, set()).add(id(candidate.owner))
@@ -103,15 +106,22 @@ class Rebrander:
             return luminance_of is not None and luminance_of(*index_of[id(owner)]) < 0.5
 
         icon_rows = LogoFinder.in_icon_rows(found)
-        has_mark = set()
+        with_rockwell = {id(c.owner) for c in found if c.rockwell}
+        has_mark = set(with_rockwell)
         for candidate in found:
             if id(candidate) in icon_rows and not candidate.rockwell:
+                continue
+            if candidate.program and id(candidate.owner) in with_rockwell:
+                # A Rockwell mark is already there (the RA lockup under a D2R ribbon).
+                candidate.shape._element.getparent().remove(candidate.shape._element)
+                report.removed += 1
                 continue
             if candidate.rockwell:
                 report.kept += 1
                 has_mark.add(id(candidate.owner))
                 continue
-            if not LogoFinder.is_foreign(candidate, uses, masters, slide_w, slide_h):
+            if not (candidate.program
+                    or LogoFinder.is_foreign(candidate, uses, masters, slide_w, slide_h)):
                 continue
             _, _, width, height = candidate.box
             mark = MarkLibrary.mark_file(width / height >= C.LOCKUP_MIN_ASPECT,

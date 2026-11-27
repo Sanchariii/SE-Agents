@@ -499,6 +499,7 @@ class StorageConstants:
         ".pdf": "application/pdf",
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".potx": "application/vnd.openxmlformats-officedocument.presentationml.template",
         ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ".csv": "text/csv",
         ".txt": "text/plain",
@@ -804,7 +805,7 @@ class ReferenceDesignConstants:
     # --- Rockwell's logo on the reference (app.genai.ppt.rebrand) ------------------- #
     #: Bump when the preparation changes, so copies prepared by an older build are
     #: not reused from the cache.
-    PREPARED_VERSION = 7                    # 7: icon rows are never treated as logos
+    PREPARED_VERSION = 8                    # 8: D2R programme marks removed
     #: A picture is a logo candidate when it is this small (inches / share of slide).
     LOGO_MIN_SIDE_IN = 0.15
     LOGO_MAX_SIDE_IN = 3.6
@@ -840,6 +841,8 @@ class ReferenceDesignConstants:
     BACKGROUND_AREA_SHARE = 0.8
     BACKDROP_AREA_SHARE = 0.15
     MARK_SHAPE_NAME = "Rockwell logo"
+    #: Logo files of programme marks (D2R): recognised, but removed from a reference.
+    PROGRAM_MARK_PREFIXES = ("d2r",)
 
 
 class PptConstants:

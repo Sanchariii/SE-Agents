@@ -22,8 +22,13 @@ def open_presentation(path: str):
     source_path = Path(path)
     if source_path.suffix.lower() != ".potx":
         return Presentation(str(source_path))
+    return open_presentation_bytes(source_path.read_bytes())
+
+
+def open_presentation_bytes(data: bytes):
+    """A .pptx or .potx held in memory (an uploaded file), opened with python-pptx."""
     buffer = io.BytesIO()
-    with zipfile.ZipFile(source_path) as source, \
+    with zipfile.ZipFile(io.BytesIO(data)) as source, \
             zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as target:
         for item in source.infolist():
             blob = source.read(item.filename)

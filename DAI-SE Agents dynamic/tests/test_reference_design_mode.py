@@ -73,7 +73,8 @@ def test_going_back_to_the_rockwell_template_is_recognised():
 def test_the_reference_is_the_deck_named_in_the_message_else_the_latest():
     def doc(name, at, status="ready", latest=True):
         return SimpleNamespace(filename=name, uploaded_at=at, version=1, status=status,
-                               is_latest=latest)
+                               is_latest=latest,
+                               storage_path="" if status == "failed" else f"blob/{name}")
     manual = doc("Manual.pdf", "2026-11-19T10:00")
     job_aid = doc("D2R JOB AID TEMPLATE 1.pptx", "2026-11-19T09:00")
     ilt = doc("D2R ILT - Account Planning.pptx", "2026-11-19T11:00")
@@ -85,6 +86,11 @@ def test_the_reference_is_the_deck_named_in_the_message_else_the_latest():
     # "D2R" is in both names, so it picks neither; the latest wins.
     assert rd.pick_reference([manual, job_aid, ilt], "copy the D2R design") is ilt
     assert rd.pick_reference([manual]) is None
+    # Text extraction failed but the file is stored: still usable as a design.
+    stored = SimpleNamespace(**dict(vars(broken), storage_path="blob/b.pptx"))
+    assert rd.pick_reference([manual, ilt, stored]) is stored
+    pending = SimpleNamespace(**dict(vars(stored), status="upload_in_progress"))
+    assert rd.pick_reference([manual, ilt, pending]) is ilt
 
 
 # --- preparing it ------------------------------------------------------------------- #
@@ -389,3 +395,30 @@ def test_references_uploaded_without_a_checksum_do_not_share_a_cache_entry(tmp_p
                                 "storage_path": "s/b"},
                           read_bytes=lambda _p: b"never read", cache_dir=cache)
     assert again.sha256 == two.sha256                         # remembered on a cache hit
+
+
+def test_a_potx_upload_is_accepted_and_its_text_can_be_read():
+    """The 2026 brand template is a .potx; uploading it as a reference must work."""
+    import io
+    import zipfile
+
+    from app.config.constants import StorageConstants
+    from app.genai.ingestion.extractors.documents import PptxExtractor
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Agenda"
+    pptx = io.BytesIO()
+    prs.save(pptx)
+    # Turn it into a .potx: only the main part's content type differs.
+    potx = io.BytesIO()
+    with zipfile.ZipFile(pptx) as src, zipfile.ZipFile(potx, "w") as dst:
+        for item in src.infolist():
+            data = src.read(item.filename)
+            if item.filename == "[Content_Types].xml":
+                data = data.replace(b"presentation.main+xml", b"template.main+xml")
+            dst.writestr(item, data)
+
+    assert ".potx" in StorageConstants.EXTENSION_MIME
+    units = PptxExtractor().extract(potx.getvalue(), None)
+    assert [u.section for u in units] == ["Agenda"]
